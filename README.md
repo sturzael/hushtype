@@ -41,6 +41,12 @@ The app is not notarized yet, so the first launch needs a right-click → **Open
 xattr -dr com.apple.quarantine /Applications/Hushtype.app
 ```
 
+**Homebrew:**
+
+```bash
+brew install --cask sturzael/tap/hushtype
+```
+
 **Build from source** (Xcode 16+ / Swift 5.10+, Apple Silicon):
 
 ```bash
