@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var settings = Settings.shared
     @ObservedObject var status: AppStatus
     @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    @State private var inputs = AudioDevices.inputs()
 
     var body: some View {
         TabView {
@@ -12,7 +13,8 @@ struct SettingsView: View {
             cleanup.tabItem { Label("Cleanup", systemImage: "sparkles") }
             permissions.tabItem { Label("Permissions", systemImage: "lock.shield") }
         }
-        .frame(width: 540, height: 560)
+        .frame(width: 540, height: 680)
+        .onAppear { inputs = AudioDevices.inputs() }
         .padding()
     }
 
@@ -45,6 +47,20 @@ struct SettingsView: View {
                 if settings.hotkey.mods.contains(.fn) {
                     Text("Set System Settings → Keyboard → “Press 🌐 key to” = Do Nothing, or macOS will open emoji/dictation too.")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("Microphone") {
+                Picker("Input device", selection: $settings.inputDeviceUID) {
+                    Text("System default (\(AudioDevices.defaultInputName()))").tag("")
+                    ForEach(inputs) { Text($0.name).tag($0.uid) }
+                }
+                HStack {
+                    Button("Test microphone (3 s)") { status.runMicTest?() }
+                    Spacer()
+                    ProgressView(value: Double(status.micLevel)).frame(width: 140)
+                }
+                if !status.micTest.isEmpty {
+                    Text(status.micTest).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
             Section("Speech model (runs on this Mac)") {

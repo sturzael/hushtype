@@ -6,6 +6,9 @@ final class AppStatus: ObservableObject {
     @Published var modelStatus = "Not loaded"
     @Published var micOK = false
     @Published var axOK = false
+    @Published var micTest = ""
+    @Published var micLevel: Float = 0
+    var runMicTest: (() -> Void)?
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -31,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireHotkeys()
         Task { await self.loadModel() }
         refreshPermissions()
+        status.runMicTest = { [weak self] in self?.micTest() }
         settingsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.applySettings()
         }
@@ -171,6 +175,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         await transcriber.prepare(model: model)
     }
 
+    /// Settings → "Test microphone": records 3 s from the chosen device, shows the level and the raw transcript.
+    private func micTest() {
+        guard !isRecording, !busy else { return }
+        Task { @MainActor in
+            guard await AudioRecorder.requestPermission() else { status.micTest = "Microphone permission is off."; return }
+            recorder.inputDeviceUID = Settings.shared.inputDeviceUID
+            var peak: Float = 0
+            let previous = recorder.levelHandler
+            recorder.levelHandler = { [weak self] l in
+                peak = max(peak, l)
+                DispatchQueue.main.async { self?.status.micLevel = l }
+            }
+            defer { recorder.levelHandler = previous }
+            do { try recorder.start() } catch { status.micTest = error.localizedDescription; return }
+            busy = true
+            status.micTest = "Recording 3 seconds… say something."
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            let samples = recorder.stop()
+            status.micLevel = 0
+            if peak < 0.08 {
+                status.micTest = "Heard almost nothing (peak level \(Int(peak * 100))%). Wrong device, or it is muted."
+                busy = false; return
+            }
+            status.micTest = "Peak level \(Int(peak * 100))%. Transcribing…"
+            do {
+                let text = try await transcriber.transcribe(samples, language: Settings.shared.language, promptTerms: Settings.shared.dictionaryTerms)
+                status.micTest = text.isEmpty ? "Peak level \(Int(peak * 100))%, but no words recognised." : "Heard: “\(text)”"
+            } catch { status.micTest = error.localizedDescription }
+            busy = false
+        }
+    }
+
     private func refreshPermissions() {
         status.axOK = Paster.accessibilityTrusted
         status.micOK = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -193,6 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
+            recorder.inputDeviceUID = Settings.shared.inputDeviceUID
             do {
                 try recorder.start()
             } catch {

@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 
 /// Captures the default microphone as 16 kHz mono Float32, which is what Whisper wants.
@@ -20,11 +21,20 @@ final class AudioRecorder {
         }
     }
 
+    /// Device UID to capture from; empty string means the system default input.
+    var inputDeviceUID: String = ""
+
     func start() throws {
         guard !isRecording else { return }
         lock.lock(); samples.removeAll(keepingCapacity: true); lock.unlock()
 
         let input = engine.inputNode
+        if !inputDeviceUID.isEmpty, let devID = AudioDevices.deviceID(forUID: inputDeviceUID), let unit = input.audioUnit {
+            var id = devID
+            let status = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                                              &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            if status != noErr { NSLog("Hushtype: could not select input device (%d), using default", status) }
+        }
         let inFormat = input.outputFormat(forBus: 0)
         guard inFormat.sampleRate > 0 else {
             throw NSError(domain: "Hushtype", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input available."])

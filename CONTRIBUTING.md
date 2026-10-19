@@ -46,7 +46,14 @@ DICTATE_DEBUG=1 … --transcribe …                      # logs sample counts a
 
 ## Signing
 
-`build.sh` signs ad-hoc unless `HUSHTYPE_SIGN_IDENTITY` is set. Ad-hoc signatures change every build, so macOS drops the Accessibility grant each rebuild. Any trusted identity (Developer ID, or a self-signed code-signing cert you trust in Keychain Access) fixes that.
+`build.sh` signs with `HUSHTYPE_SIGN_IDENTITY` if set, otherwise with a self-signed certificate named `Hushtype Dev` if one is in your login keychain, otherwise ad-hoc. Ad-hoc signatures change every build, so macOS drops the Accessibility and Microphone grants on each rebuild; any stable identity (even an untrusted self-signed one) keeps them. To make one without the GUI:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -days 3650 -subj '/CN=Hushtype Dev' \
+  -addext 'keyUsage=critical,digitalSignature' -addext 'extendedKeyUsage=critical,codeSigning'
+openssl pkcs12 -export -out h.p12 -inkey k.pem -in c.pem -passout pass:x -legacy
+security import h.p12 -k ~/Library/Keychains/login.keychain-db -P x -T /usr/bin/codesign && rm k.pem h.p12
+```
 
 ## Roadmap / good first issues
 

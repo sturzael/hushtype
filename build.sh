@@ -11,9 +11,11 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 # Bundle resources WhisperKit's dependencies may ship.
 for b in .build/release/*.bundle; do [ -e "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done
 IDENTITY="${HUSHTYPE_SIGN_IDENTITY:-}"
-# Optional: export HUSHTYPE_SIGN_IDENTITY="Developer ID Application: …" (or any trusted identity) so macOS keeps permissions across rebuilds.
+# Signing: HUSHTYPE_SIGN_IDENTITY if set, else a self-signed "Hushtype Dev" cert if one is in the keychain, else ad-hoc.
+# A stable identity (even self-signed and untrusted) keeps the Accessibility/Microphone grants across rebuilds.
+if [ -z "$IDENTITY" ] && security find-identity -p codesigning 2>/dev/null | grep -q '"Hushtype Dev"'; then IDENTITY="Hushtype Dev"; fi
 if [ -n "$IDENTITY" ]; then
-  codesign --force --deep --options runtime --sign "$IDENTITY" "$APP"
+  codesign --force --deep --sign "$IDENTITY" "$APP"
 else
   codesign --force --deep --sign - "$APP"
 fi
