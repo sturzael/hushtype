@@ -87,7 +87,8 @@ struct SettingsView: View {
                 TextField("Language code (blank = auto-detect)", text: $settings.language)
             }
             Section {
-                Toggle("Always show the small pill on screen", isOn: $settings.showIdlePill)
+                Toggle("Always show the small tab on screen", isOn: $settings.showIdlePill)
+                Toggle("Show words in the pill while you speak", isOn: $settings.livePreview)
                 Picker("Pill position", selection: $settings.pillPosition) {
                     ForEach(PillPosition.allCases) { Text($0.label).tag($0) }
                 }

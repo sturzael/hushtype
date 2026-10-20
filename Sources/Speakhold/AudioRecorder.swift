@@ -51,6 +51,12 @@ final class AudioRecorder {
         isRecording = true
     }
 
+    /// Copy of everything captured so far (for the live transcript preview while still recording).
+    func snapshot() -> [Float] {
+        lock.lock(); defer { lock.unlock() }
+        return samples
+    }
+
     /// Stops and returns the captured 16 kHz samples.
     func stop() -> [Float] {
         guard isRecording else { return [] }

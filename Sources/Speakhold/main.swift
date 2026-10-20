@@ -15,9 +15,11 @@ import UniformTypeIdentifiers
     }
     m.phase = .listening
     for i in 0..<28 { m.push(level: Float(0.25 + 0.7 * abs(sin(Double(i) / 4)))) }
-    for i in 0..<48 {
+    let spoken = "Can you check the HubSpot sync before standup?".split(separator: " ")
+    for i in 0..<60 {
         let t = Double(i) / 6
         m.push(level: Float(0.25 + 0.7 * abs(sin(t * 1.3) * cos(t * 0.7))) + Float.random(in: 0...0.2))
+        if i >= 8, i % 6 == 2 { m.liveText = spoken.prefix(min(spoken.count, (i - 8) / 6 + 1)).joined(separator: " ") }
         snap()
     }
     m.phase = .transcribing
@@ -41,6 +43,7 @@ import UniformTypeIdentifiers
     for (name, phase) in states {
         let m = OverlayModel(); m.phase = phase
         m.levels = (0..<28).map { _ in Float.random(in: 0.1...1) }
+        if phase == .listening || phase == .transcribing { m.liveText = "Hey Smriti, can you check the Pinnacle HubSpot sync" }
         let r = ImageRenderer(content: OverlayView(model: m).background(Color(red: 0.93, green: 0.93, blue: 0.95)))
         r.scale = 2
         guard let cg = r.cgImage else { print("render failed", name); continue }

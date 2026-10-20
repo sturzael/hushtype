@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pressedAt: Date?
     private var lastLevelPush = Date.distantPast
     private var settingsObserver: Any?
+    private var previewTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -156,12 +157,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// UserDefaults.didChangeNotification is posted synchronously from inside a Settings setter, i.e. while that
+    /// property's exclusive write access is still open. Touching the overlay here would make SwiftUI lay out the
+    /// pill (which reads Settings) inside that access and abort with "simultaneous accesses" — the 20 Oct crash.
+    /// So everything is deferred to the next run-loop turn.
     private func applySettings() {
-        if hotkeys.combo != Settings.shared.hotkey {
-            hotkeys.combo = Settings.shared.hotkey
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if self.hotkeys.combo != Settings.shared.hotkey {
+                self.hotkeys.combo = Settings.shared.hotkey
+            }
+            if !self.isRecording, !self.busy { self.overlay.relayout(); self.overlay.hide() }   // apply idle-pill / position settings immediately
+            Task { await self.loadModel() }
         }
-        if !isRecording, !busy { overlay.relayout(); overlay.hide() }   // apply the idle-pill / position settings immediately
-        Task { await self.loadModel() }
     }
 
     private func loadModel() async {
@@ -243,13 +251,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = true
             setIcon(recording: true)
             overlay.model.resetLevels()
+            overlay.model.liveText = ""
             overlay.show(.listening)
             if Settings.shared.playSounds { NSSound(named: "Tink")?.play() }
+            if Settings.shared.livePreview { startLivePreview() }
+        }
+    }
+
+    /// Willow-style live transcript: every ~0.8 s re-run the decoder over everything captured so far and show the
+    /// result in the pill. Runs through the same actor as the final pass, so the two never overlap; the final
+    /// pass simply queues behind an in-flight tick.
+    private func startLivePreview() {
+        previewTask?.cancel()
+        let s = Settings.shared
+        previewTask = Task { [weak self] in
+            var lastCount = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                guard let self, !Task.isCancelled else { return }
+                let samples = self.recorder.snapshot()
+                // Need a second of audio, and at least half a second of new audio since the last tick.
+                guard samples.count >= 16_000, samples.count - lastCount >= 8_000 else { continue }
+                lastCount = samples.count
+                guard let text = try? await self.transcriber.transcribe(samples, language: s.language, promptTerms: s.dictionaryTerms, fast: true),
+                      !Task.isCancelled, !text.isEmpty else { continue }
+                await MainActor.run { if self.isRecording { self.overlay.model.liveText = text } }
+            }
         }
     }
 
     private func cancelRecording() {
         guard isRecording else { return }
+        previewTask?.cancel(); previewTask = nil
         _ = recorder.stop()
         isRecording = false
         setIcon(recording: false)
@@ -258,6 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishRecording() {
         guard isRecording else { return }
+        previewTask?.cancel(); previewTask = nil
         let samples = recorder.stop()
         isRecording = false
         setIcon(recording: false)
@@ -289,7 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Paster.paste(text)
                     History.shared.add(text, app: app)
                     overlay.show(.done(text))
-                    hideSoon(0.9)
+                    hideSoon(0.7)
                 }
             } catch {
                 await MainActor.run { overlay.show(.error(error.localizedDescription)); hideSoon(3) }

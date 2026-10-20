@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Live transcript in the pill while you hold the key (Willow-style): words appear as you speak, newest words stay visible. Toggle under Settings → General → "Show words in the pill while you speak".
+- Idle state is a small tab that hugs the screen edge; the pill floats just above it while active.
+- Fixed a crash when changing the pill position / idle-tab settings while the overlay was on screen (Swift exclusivity abort inside SwiftUI layout).
+
 ## 0.1.0 — 2026-10-20
 
 First public release.

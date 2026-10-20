@@ -121,6 +121,7 @@ final class Settings: ObservableObject {
     @Published var language: String { didSet { d.set(language, forKey: "language") } }
     @Published var inputDeviceUID: String { didSet { d.set(inputDeviceUID, forKey: "inputDeviceUID") } }
     @Published var showIdlePill: Bool { didSet { d.set(showIdlePill, forKey: "showIdlePill") } }
+    @Published var livePreview: Bool { didSet { d.set(livePreview, forKey: "livePreview") } }
     @Published var pillPosition: PillPosition { didSet { d.set(pillPosition.rawValue, forKey: "pillPosition") } }
 
     private init() {
@@ -140,6 +141,7 @@ final class Settings: ObservableObject {
         language = d.string(forKey: "language") ?? "en"
         inputDeviceUID = d.string(forKey: "inputDeviceUID") ?? ""
         showIdlePill = d.object(forKey: "showIdlePill") as? Bool ?? true
+        livePreview = d.object(forKey: "livePreview") as? Bool ?? true
         pillPosition = PillPosition(rawValue: d.string(forKey: "pillPosition") ?? "") ?? .bottomRight
     }
 

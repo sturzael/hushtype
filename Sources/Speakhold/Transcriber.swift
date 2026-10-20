@@ -52,7 +52,8 @@ actor Transcriber {
         }
     }
 
-    func transcribe(_ samples: [Float], language: String, promptTerms: [String]) async throws -> String {
+    /// `fast` is the live preview while recording: no temperature fallback, so a tick costs one decoder pass.
+    func transcribe(_ samples: [Float], language: String, promptTerms: [String], fast: Bool = false) async throws -> String {
         guard let kit else { throw NSError(domain: "Speakhold", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
         // Whisper needs at least ~1 s; pad very short clips with silence.
         var audio = samples
@@ -65,7 +66,7 @@ actor Transcriber {
         options.task = .transcribe
         options.skipSpecialTokens = true
         options.withoutTimestamps = true
-        options.temperatureFallbackCount = 2
+        options.temperatureFallbackCount = fast ? 0 : 2
         options.chunkingStrategy = .vad
         // Bias the decoder toward names it would otherwise mangle.
         if env["DICTATE_NO_PROMPT"] == nil, !promptTerms.isEmpty, let tok = kit.tokenizer {

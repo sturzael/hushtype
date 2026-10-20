@@ -1,13 +1,16 @@
 import AppKit
 import SwiftUI
 
-/// Floating pill at the bottom of the screen, like Willow's. Non-activating so focus stays in the target app.
+/// Floating bar at the screen edge, modelled on Willow's: a tiny tab while idle, a dark pill that streams the
+/// words as you speak while the hotkey is held. Non-activating so focus stays in the target app.
 final class OverlayModel: ObservableObject {
     enum Phase: Equatable { case hidden, idle, listening, transcribing, cleaning, done(String), error(String) }
-    /// Speech model loaded; the idle dot turns from grey to coral.
+    /// Speech model loaded.
     @Published var ready = false
     @Published var phase: Phase = .hidden
     @Published var levels: [Float] = Array(repeating: 0.05, count: 28)
+    /// Partial transcript shown while recording and until the final text is pasted.
+    @Published var liveText = ""
 
     func push(level: Float) {
         levels.removeFirst()
@@ -19,25 +22,42 @@ final class OverlayModel: ObservableObject {
 struct OverlayView: View {
     @ObservedObject var model: OverlayModel
 
+    private var position: PillPosition { Settings.shared.pillPosition }
+    private var isIdle: Bool { model.phase == .idle }
+    private var anchor: Alignment {
+        switch position { case .bottomCenter: return .bottom; case .bottomRight: return .bottomTrailing; case .rightEdge: return .trailing }
+    }
+    private var unitAnchor: UnitPoint {
+        switch position { case .bottomCenter: return .bottom; case .bottomRight: return .bottomTrailing; case .rightEdge: return .trailing }
+    }
+
     var body: some View {
-        let flush = Settings.shared.pillPosition != .bottomCenter
-        ZStack(alignment: flush ? .bottomTrailing : .bottom) {
+        ZStack(alignment: anchor) {
             Color.clear
             pill
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: flush ? .bottomTrailing : .bottom)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: anchor)
     }
 
     private var isLit: Bool {
-        switch model.phase { case .listening, .transcribing, .cleaning, .done: return true; default: return false }
+        switch model.phase { case .listening, .transcribing, .cleaning, .done, .error: return true; default: return false }
     }
+
+    /// The idle tab hugs the screen edge it is docked to; the active pill floats just off it.
+    private var shape: PillShape {
+        switch position {
+        case .bottomCenter: return PillShape(squareRight: false, squareBottom: isIdle)
+        case .bottomRight: return PillShape(squareRight: true, squareBottom: isIdle)
+        case .rightEdge: return PillShape(squareRight: true, squareBottom: false)
+        }
+    }
+
     private var pillBackground: some View {
-        let flush = Settings.shared.pillPosition != .bottomCenter
         let accent = Color(red: 1, green: 0.42, blue: 0.3)
-        let fill: Color = isLit ? Color(red: 0.16, green: 0.08, blue: 0.06) : Color(red: 0.42, green: 0.42, blue: 0.46)
-        return PillShape(flushRight: flush).fill(fill.opacity(isLit ? 0.95 : 0.55))
-            .overlay(PillShape(flushRight: flush).strokeBorder(isLit ? accent.opacity(0.9) : Color.white.opacity(0.08), lineWidth: isLit ? 1.5 : 1))
-            .shadow(color: isLit ? accent.opacity(0.55) : .black.opacity(0.2), radius: isLit ? 16 : 6, y: 2)
+        let fill: Color = isLit ? Color(red: 0.11, green: 0.10, blue: 0.11) : Color(red: 0.24, green: 0.24, blue: 0.27)
+        return shape.fill(fill.opacity(isLit ? 0.96 : 0.85))
+            .overlay(shape.strokeBorder(isLit ? accent.opacity(0.75) : Color.white.opacity(0.12), lineWidth: 1))
+            .shadow(color: isLit ? accent.opacity(0.45) : .black.opacity(0.25), radius: isLit ? 14 : 4, y: 1)
     }
 
     private var phaseKey: String {
@@ -47,47 +67,63 @@ struct OverlayView: View {
         }
     }
 
+    private func words(_ s: String) -> some View {
+        Text(s)
+            .font(.system(size: 15, weight: .medium))
+            .lineLimit(1)
+            .truncationMode(.head)   // like Willow: the newest words stay visible, the start scrolls off
+            .foregroundStyle(.white)
+    }
+
     private var pill: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             switch model.phase {
             case .idle:
-                Color.clear.frame(width: 34, height: 6)
+                Color.clear.frame(width: 36, height: 6)
             case .listening:
-                Waveform(levels: model.levels).frame(width: 96, height: 18)
+                Waveform(levels: Array(model.levels.suffix(14))).frame(height: 18)
+                if !model.liveText.isEmpty { words(model.liveText) }
             case .transcribing, .cleaning:
-                Spinner().frame(width: 96, height: 18)
-            case .done:
-                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white).frame(width: 96, height: 18)
+                Spinner()
+                if !model.liveText.isEmpty { words(model.liveText + "…") }
+            case .done(let text):
+                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                words(text)
             case .error(let msg):
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                Text(msg).font(.system(size: 12)).lineLimit(2).frame(maxWidth: 320)
+                Text(msg).font(.system(size: 13)).lineLimit(2).foregroundStyle(.white)
             case .hidden:
                 EmptyView()
             }
         }
         .id(phaseKey)
-        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: Settings.shared.pillPosition == .bottomCenter ? .bottom : .bottomTrailing)))
-        .foregroundStyle(.white)
-        .padding(.horizontal, model.phase == .idle ? 10 : 14)
-        .padding(.vertical, model.phase == .idle ? 6 : 9)
+        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: unitAnchor)))
+        .padding(.horizontal, isIdle ? 10 : 16)
+        .padding(.vertical, isIdle ? 5 : 11)
         .background(pillBackground)
-        .padding(.vertical, 20)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.liveText)
+        .padding(.top, 20)
         .padding(.leading, 20)
-        .padding(.trailing, Settings.shared.pillPosition == .bottomCenter ? 20 : 0)   // flush against the right screen edge
+        .padding(.bottom, (isIdle && position != .rightEdge) ? 0 : 16)   // tab sits on the edge; pill floats above it
+        .padding(.trailing, position == .bottomCenter ? 20 : 0)           // flush against the right screen edge
         .opacity(model.phase == .hidden ? 0 : 1)
     }
 }
 
-/// Capsule normally; square right corners when attached to the screen edge.
+/// Capsule, with the corners squared off on whichever screen edges it is docked against.
 struct PillShape: InsettableShape {
-    var flushRight: Bool
+    var squareRight: Bool
+    var squareBottom: Bool
     var inset: CGFloat = 0
     func inset(by amount: CGFloat) -> PillShape { var c = self; c.inset += amount; return c }
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: inset, dy: inset)
         let radius = r.height / 2
-        return Path(roundedRect: r, cornerRadii: RectangleCornerRadii(topLeading: radius, bottomLeading: radius,
-                                                                         bottomTrailing: flushRight ? 0 : radius, topTrailing: flushRight ? 0 : radius))
+        return Path(roundedRect: r, cornerRadii: RectangleCornerRadii(
+            topLeading: radius,
+            bottomLeading: squareBottom ? 0 : radius,
+            bottomTrailing: (squareRight || squareBottom) ? 0 : radius,
+            topTrailing: squareRight ? 0 : radius))
     }
 }
 
@@ -98,7 +134,7 @@ struct Waveform: View {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, l in
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Color(red: 1, green: 0.42, blue: 0.3))
-                    .frame(width: 2.5, height: max(2, CGFloat(l) * 18))
+                    .frame(width: 2.5, height: max(3, CGFloat(l) * 18))
             }
         }
         .animation(.linear(duration: 0.05), value: levels)
@@ -122,7 +158,7 @@ struct Spinner: View {
     var body: some View {
         Circle().trim(from: 0, to: 0.72)
             .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            .frame(width: 12, height: 12)
+            .frame(width: 13, height: 13)
             .rotationEffect(.degrees(spin ? 360 : 0))
             .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: spin)
             .onAppear { spin = true }
@@ -158,16 +194,19 @@ final class OverlayPanel: NSPanel {
     func show(_ phase: OverlayModel.Phase) {
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if !isVisible || screen != placedOn { layout(on: screen); placedOn = screen }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { model.phase = phase }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            model.phase = phase
+            if phase == .idle || phase == .hidden { model.liveText = "" }
+        }
         if !isVisible { orderFrontRegardless() }
     }
 
-    /// Returns to the idle state: a small always-on pill if enabled, otherwise fades out.
+    /// Returns to the idle state: a small always-on tab if enabled, otherwise fades out.
     func hide() {
         if Settings.shared.showIdlePill {
             show(.idle)
         } else {
-            withAnimation(.easeOut(duration: 0.2)) { model.phase = .hidden }
+            withAnimation(.easeOut(duration: 0.2)) { model.phase = .hidden; model.liveText = "" }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                 guard let self, self.model.phase == .hidden else { return }
                 self.orderOut(nil)
@@ -175,17 +214,20 @@ final class OverlayPanel: NSPanel {
         }
     }
 
-    /// The panel never resizes; it is a fixed transparent box pinned to the chosen corner.
+    /// The panel never resizes while showing; it is a fixed transparent box pinned to the chosen edge, wide enough
+    /// for the live transcript (the Text truncates at the panel's edge, so the panel width is the pill's maximum).
     private func layout(on screen: NSScreen?) {
         guard let screen else { return }
         let f = screen.visibleFrame
+        let width = min(f.width * 0.72, 980)
+        let height: CGFloat = 110
         switch Settings.shared.pillPosition {
         case .bottomCenter:
-            setFrameOrigin(NSPoint(x: f.midX - frame.width / 2, y: f.minY + 4))
+            setFrame(NSRect(x: f.midX - width / 2, y: f.minY, width: width, height: height), display: false)
         case .bottomRight:
-            setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.minY + 4))
+            setFrame(NSRect(x: f.maxX - width, y: f.minY, width: width, height: height), display: false)
         case .rightEdge:
-            setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.midY - frame.height / 2))
+            setFrame(NSRect(x: f.maxX - width, y: f.midY - height / 2, width: width, height: height), display: false)
         }
     }
 }
