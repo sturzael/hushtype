@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" width="520" alt="Speakhold demo: hold the hotkey, a pill shows a live waveform, release and the text is pasted">
+  <img src="docs/demo.gif" width="520" alt="Speakhold demo: hold the hotkey, the bar shows your words as you speak, release and the text is pasted">
 </p>
 
 Speakhold is a push-to-talk voice typing tool for Mac, built as a free replacement for **Willow Voice**, **Wispr Flow**, **Superwhisper** and **MacWhisper**-style dictation. It is a single native Swift binary, a couple of megabytes, no Electron, no account, no subscription.
@@ -28,7 +28,12 @@ Speakhold is a push-to-talk voice typing tool for Mac, built as a free replaceme
 - **100 % on-device.** Speech-to-text runs with [WhisperKit](https://github.com/argmaxinc/WhisperKit) on the Apple Neural Engine. Works offline. Your audio never touches a server.
 - **Any hotkey chord, left and right aware.** Hold *left ⌃ + left ⌥* (default), *right ⌥* alone, *fn*, or add an F-key. Hold-to-talk or press-to-toggle.
 - **Pastes anywhere.** Slack, Gmail, Xcode, Terminal, Notes, your browser: wherever the cursor is.
-- **Willow-style pill.** Live waveform while you speak, spinner while it thinks, tick when it lands. Esc cancels.
+- **Words as you speak.** A small tab docked to the right edge of the screen opens into a bar that shows the transcript live while you hold the key, Willow-style. Release and it lands at the cursor. Esc cancels.
+
+<p align="center">
+  <img src="docs/states.png" width="600" alt="The Speakhold bar in each state: idle tab, listening with live words, transcribing, polishing, done, error">
+</p>
+
 - **Optional AI polish.** Add a Claude API key and Speakhold strips "um"s, fixes punctuation and spells the names in your personal dictionary correctly. Off by default; falls back to the raw transcript if the network is down.
 - **Native and tiny.** Swift + SwiftUI + AppKit. Menu-bar only. Launch at login. History window with one-click copy.
 
@@ -67,7 +72,7 @@ open ~/Applications/Speakhold.app
 
 | Tab | What you can change |
 |---|---|
-| **General** | Hotkey: click Record and press the keys you want (any mix of left/right ⌃ ⌥ ⇧ ⌘, fn, plus an optional F-key), hold vs toggle, microphone picker with a 3 s test, Whisper model (Large v3 Turbo, Large v3, Distil, Base), language, sounds, launch at login |
+| **General** | Hotkey: click Record and press the keys you want (any mix of left/right ⌃ ⌥ ⇧ ⌘, fn, plus an optional F-key), hold vs toggle, microphone picker with a 3 s test, Whisper model (Large v3 Turbo, Large v3, Distil, Base), language, bar position (right edge / bottom right / bottom centre), idle tab on/off, live words on/off, sounds, launch at login |
 | **Cleanup** | Claude polish on/off, model id, API key (or set `ANTHROPIC_API_KEY`), personal dictionary, style notes |
 | **Permissions** | Microphone and Accessibility status with one-click prompts |
 
