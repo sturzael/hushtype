@@ -28,6 +28,18 @@ struct OverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: flush ? .bottomTrailing : .bottom)
     }
 
+    private var isLit: Bool {
+        switch model.phase { case .listening, .transcribing, .cleaning, .done: return true; default: return false }
+    }
+    private var pillBackground: some View {
+        let flush = Settings.shared.pillPosition != .bottomCenter
+        let accent = Color(red: 1, green: 0.42, blue: 0.3)
+        let fill: Color = isLit ? Color(red: 0.16, green: 0.08, blue: 0.06) : Color(red: 0.42, green: 0.42, blue: 0.46)
+        return PillShape(flushRight: flush).fill(fill.opacity(isLit ? 0.95 : 0.55))
+            .overlay(PillShape(flushRight: flush).strokeBorder(isLit ? accent.opacity(0.9) : Color.white.opacity(0.08), lineWidth: isLit ? 1.5 : 1))
+            .shadow(color: isLit ? accent.opacity(0.55) : .black.opacity(0.2), radius: isLit ? 16 : 6, y: 2)
+    }
+
     private var phaseKey: String {
         switch model.phase {
         case .hidden: return "hidden"; case .idle: return "idle"; case .listening: return "listening"
@@ -36,34 +48,19 @@ struct OverlayView: View {
     }
 
     private var pill: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             switch model.phase {
             case .idle:
-                Circle().fill(model.ready ? Color(red: 1, green: 0.42, blue: 0.3) : Color.gray).frame(width: 7, height: 7)
-                HStack(spacing: 2) {
-                    ForEach(0..<9, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 1).fill(Color.white.opacity(0.7))
-                            .frame(width: 2, height: [4, 8, 12, 7, 10, 6, 11, 8, 4][i])
-                    }
-                }.frame(height: 12)
+                Color.clear.frame(width: 34, height: 6)
             case .listening:
-                PulsingDot()
-                Waveform(levels: model.levels)
-                    .frame(width: 120, height: 22)
-                Text("Listening").font(.system(size: 13, weight: .medium))
-                Text("esc to cancel").font(.system(size: 11)).foregroundStyle(.secondary)
-            case .transcribing:
-                Spinner()
-                Text("Transcribing…").font(.system(size: 13, weight: .medium))
-            case .cleaning:
-                Spinner()
-                Text("Polishing…").font(.system(size: 13, weight: .medium))
-            case .done(let text):
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text(text).font(.system(size: 13)).lineLimit(1).truncationMode(.tail).frame(maxWidth: 360)
+                Waveform(levels: model.levels).frame(width: 96, height: 18)
+            case .transcribing, .cleaning:
+                Spinner().frame(width: 96, height: 18)
+            case .done:
+                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white).frame(width: 96, height: 18)
             case .error(let msg):
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                Text(msg).font(.system(size: 13)).lineLimit(2).frame(maxWidth: 360)
+                Text(msg).font(.system(size: 12)).lineLimit(2).frame(maxWidth: 320)
             case .hidden:
                 EmptyView()
             }
@@ -71,13 +68,9 @@ struct OverlayView: View {
         .id(phaseKey)
         .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: Settings.shared.pillPosition == .bottomCenter ? .bottom : .bottomTrailing)))
         .foregroundStyle(.white)
-        .padding(.horizontal, model.phase == .idle ? 11 : 16)
-        .padding(.vertical, model.phase == .idle ? 7 : 10)
-        .background(
-            PillShape(flushRight: Settings.shared.pillPosition != .bottomCenter).fill(Color.black.opacity(0.82))
-                .overlay(PillShape(flushRight: Settings.shared.pillPosition != .bottomCenter).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
-        )
+        .padding(.horizontal, model.phase == .idle ? 10 : 14)
+        .padding(.vertical, model.phase == .idle ? 6 : 9)
+        .background(pillBackground)
         .padding(.vertical, 20)
         .padding(.leading, 20)
         .padding(.trailing, Settings.shared.pillPosition == .bottomCenter ? 20 : 0)   // flush against the right screen edge
@@ -104,8 +97,8 @@ struct Waveform: View {
         HStack(alignment: .center, spacing: 2) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, l in
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.white.opacity(0.95))
-                    .frame(width: 2.5, height: max(3, CGFloat(l) * 22))
+                    .fill(Color(red: 1, green: 0.42, blue: 0.3))
+                    .frame(width: 2.5, height: max(2, CGFloat(l) * 18))
             }
         }
         .animation(.linear(duration: 0.05), value: levels)
@@ -129,7 +122,7 @@ struct Spinner: View {
     var body: some View {
         Circle().trim(from: 0, to: 0.72)
             .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            .frame(width: 14, height: 14)
+            .frame(width: 12, height: 12)
             .rotationEffect(.degrees(spin ? 360 : 0))
             .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: spin)
             .onAppear { spin = true }

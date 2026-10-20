@@ -289,7 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Paster.paste(text)
                     History.shared.add(text, app: app)
                     overlay.show(.done(text))
-                    hideSoon(1.4)
+                    hideSoon(0.9)
                 }
             } catch {
                 await MainActor.run { overlay.show(.error(error.localizedDescription)); hideSoon(3) }
