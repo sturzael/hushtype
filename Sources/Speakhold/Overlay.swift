@@ -56,12 +56,27 @@ struct OverlayView: View {
         .padding(.horizontal, model.phase == .idle ? 11 : 16)
         .padding(.vertical, model.phase == .idle ? 7 : 10)
         .background(
-            Capsule().fill(Color.black.opacity(0.82))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+            PillShape(flushRight: Settings.shared.pillPosition != .bottomCenter).fill(Color.black.opacity(0.82))
+                .overlay(PillShape(flushRight: Settings.shared.pillPosition != .bottomCenter).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                 .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
         )
-        .padding(20)
+        .padding(.vertical, 20)
+        .padding(.leading, 20)
+        .padding(.trailing, Settings.shared.pillPosition == .bottomCenter ? 20 : 0)   // flush against the right screen edge
         .animation(.easeInOut(duration: 0.18), value: model.phase)
+    }
+}
+
+/// Capsule normally; square right corners when attached to the screen edge.
+struct PillShape: InsettableShape {
+    var flushRight: Bool
+    var inset: CGFloat = 0
+    func inset(by amount: CGFloat) -> PillShape { var c = self; c.inset += amount; return c }
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: inset, dy: inset)
+        let radius = r.height / 2
+        return Path(roundedRect: r, cornerRadii: RectangleCornerRadii(topLeading: radius, bottomLeading: radius,
+                                                                         bottomTrailing: flushRight ? 0 : radius, topTrailing: flushRight ? 0 : radius))
     }
 }
 
@@ -145,17 +160,16 @@ final class OverlayPanel: NSPanel {
         guard let screen else { return }
         if let host = contentView as? NSHostingView<OverlayView> {
             let size = host.fittingSize
-            setContentSize(NSSize(width: max(size.width, 160), height: max(size.height, 60)))
+            setContentSize(NSSize(width: ceil(size.width), height: ceil(size.height)))
         }
         let f = screen.visibleFrame
-        let pad = 20.0   // the SwiftUI view keeps 20 pt of transparent padding around the capsule for its shadow
         switch Settings.shared.pillPosition {
         case .bottomCenter:
             setFrameOrigin(NSPoint(x: f.midX - frame.width / 2, y: f.minY + 24))
         case .bottomRight:
-            setFrameOrigin(NSPoint(x: f.maxX - frame.width + pad, y: f.minY + 24))
+            setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.minY + 24))
         case .rightEdge:
-            setFrameOrigin(NSPoint(x: f.maxX - frame.width + pad, y: f.midY - frame.height / 2))
+            setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.midY - frame.height / 2))
         }
     }
 }
