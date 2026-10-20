@@ -69,6 +69,18 @@ struct HotkeyCombo: Codable, Equatable {
     }
 }
 
+enum PillPosition: String, CaseIterable, Identifiable {
+    case bottomCenter, bottomRight, rightEdge
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .bottomCenter: return "Bottom centre"
+        case .bottomRight: return "Bottom right, flush to the edge"
+        case .rightEdge: return "Right edge, mid-height"
+        }
+    }
+}
+
 enum HotkeyMode: String, CaseIterable, Identifiable {
     case hold, toggle
     var id: String { rawValue }
@@ -109,6 +121,7 @@ final class Settings: ObservableObject {
     @Published var language: String { didSet { d.set(language, forKey: "language") } }
     @Published var inputDeviceUID: String { didSet { d.set(inputDeviceUID, forKey: "inputDeviceUID") } }
     @Published var showIdlePill: Bool { didSet { d.set(showIdlePill, forKey: "showIdlePill") } }
+    @Published var pillPosition: PillPosition { didSet { d.set(pillPosition.rawValue, forKey: "pillPosition") } }
 
     private init() {
         if let data = d.data(forKey: "hotkeyCombo"), let c = try? JSONDecoder().decode(HotkeyCombo.self, from: data), c.isValid {
@@ -127,6 +140,7 @@ final class Settings: ObservableObject {
         language = d.string(forKey: "language") ?? "en"
         inputDeviceUID = d.string(forKey: "inputDeviceUID") ?? ""
         showIdlePill = d.object(forKey: "showIdlePill") as? Bool ?? true
+        pillPosition = PillPosition(rawValue: d.string(forKey: "pillPosition") ?? "") ?? .bottomRight
     }
 
     /// Picks up ANTHROPIC_API_KEY from the environment on first launch so there is nothing to paste.

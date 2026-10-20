@@ -148,8 +148,14 @@ final class OverlayPanel: NSPanel {
             setContentSize(NSSize(width: max(size.width, 160), height: max(size.height, 60)))
         }
         let f = screen.visibleFrame
-        let x = f.midX - frame.width / 2
-        let y = f.minY + 24
-        setFrameOrigin(NSPoint(x: x, y: y))
+        let pad = 20.0   // the SwiftUI view keeps 20 pt of transparent padding around the capsule for its shadow
+        switch Settings.shared.pillPosition {
+        case .bottomCenter:
+            setFrameOrigin(NSPoint(x: f.midX - frame.width / 2, y: f.minY + 24))
+        case .bottomRight:
+            setFrameOrigin(NSPoint(x: f.maxX - frame.width + pad, y: f.minY + 24))
+        case .rightEdge:
+            setFrameOrigin(NSPoint(x: f.maxX - frame.width + pad, y: f.midY - frame.height / 2))
+        }
     }
 }
