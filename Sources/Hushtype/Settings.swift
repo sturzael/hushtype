@@ -47,6 +47,7 @@ enum PlainKey: String, CaseIterable, Codable, Identifiable {
     case none, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12
     var id: String { rawValue }
     var label: String { self == .none ? "None (modifiers only)" : rawValue.uppercased() }
+    static func from(keyCode: UInt16) -> PlainKey? { allCases.first { $0.keyCode == keyCode } }
     var keyCode: UInt16? {
         switch self {
         case .none: return nil

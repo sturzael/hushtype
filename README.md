@@ -67,7 +67,7 @@ open ~/Applications/Hushtype.app
 
 | Tab | What you can change |
 |---|---|
-| **General** | Hotkey chord (any mix of left/right ⌃ ⌥ ⇧ ⌘, fn, plus an optional F-key), hold vs toggle, Whisper model (Large v3 Turbo, Large v3, Distil, Base), language, sounds, launch at login |
+| **General** | Hotkey: click Record and press the keys you want (any mix of left/right ⌃ ⌥ ⇧ ⌘, fn, plus an optional F-key), hold vs toggle, microphone picker with a 3 s test, Whisper model (Large v3 Turbo, Large v3, Distil, Base), language, sounds, launch at login |
 | **Cleanup** | Claude polish on/off, model id, API key (or set `ANTHROPIC_API_KEY`), personal dictionary, style notes |
 | **Permissions** | Microphone and Accessibility status with one-click prompts |
 

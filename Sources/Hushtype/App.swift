@@ -9,6 +9,8 @@ final class AppStatus: ObservableObject {
     @Published var micTest = ""
     @Published var micLevel: Float = 0
     var runMicTest: (() -> Void)?
+    /// Settings sets this while the user is recording a new shortcut so the global hotkey does not fire.
+    var suspendHotkey: ((Bool) -> Void)?
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -35,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await self.loadModel() }
         refreshPermissions()
         status.runMicTest = { [weak self] in self?.micTest() }
+        status.suspendHotkey = { [weak self] on in self?.hotkeys.suspended = on }
         settingsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.applySettings()
         }

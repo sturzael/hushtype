@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject var status: AppStatus
     @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
     @State private var inputs = AudioDevices.inputs()
+    @StateObject private var recorder = ShortcutRecorder()
 
     var body: some View {
         TabView {
@@ -20,29 +21,40 @@ struct SettingsView: View {
 
     var general: some View {
         Form {
-            Section("Hotkey — tick the keys to hold together") {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 6) {
-                    ForEach(ModKey.allCases) { m in
-                        Toggle(m.label, isOn: Binding(
-                            get: { settings.hotkey.mods.contains(m) },
-                            set: { on in var c = settings.hotkey; if on { c.mods.insert(m) } else { c.mods.remove(m) }; settings.hotkey = c }
-                        ))
+            Section("Hotkey") {
+                HStack {
+                    Text("Shortcut").foregroundStyle(.secondary)
+                    Spacer()
+                    Text(recorder.isRecording ? (recorder.held.isEmpty ? "Press your keys…" : recorder.previewLabel) : settings.hotkey.label)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(recorder.isRecording ? Color.accentColor : (settings.hotkey.isValid ? Color.primary : Color.red))
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(recorder.isRecording ? 0.18 : 0.08)))
+                    Button(recorder.isRecording ? "Cancel" : "Record…") {
+                        if recorder.isRecording { recorder.stop(); status.suspendHotkey?(false) }
+                        else { status.suspendHotkey?(true); recorder.start { combo in settings.hotkey = combo; status.suspendHotkey?(false) } }
                     }
                 }
-                Picker("Plus key", selection: Binding(
-                    get: { settings.hotkey.key },
-                    set: { k in var c = settings.hotkey; c.key = k; settings.hotkey = c }
-                )) {
-                    ForEach(PlainKey.allCases) { Text($0.label).tag($0) }
-                }
-                HStack {
-                    Text("Current").foregroundStyle(.secondary)
-                    Spacer()
-                    Text(settings.hotkey.label).fontWeight(.semibold)
-                        .foregroundStyle(settings.hotkey.isValid ? Color.primary : Color.red)
-                }
+                Text("Click Record, then hold the keys you want (e.g. Control + Option) and let go. Left and right keys are told apart. Add an F-key by pressing it while holding the modifiers.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Picker("Behaviour", selection: $settings.mode) {
                     ForEach(HotkeyMode.allCases) { Text($0.label).tag($0) }
+                }
+                DisclosureGroup("Fine-tune individual keys") {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 6) {
+                        ForEach(ModKey.allCases) { m in
+                            Toggle(m.label, isOn: Binding(
+                                get: { settings.hotkey.mods.contains(m) },
+                                set: { on in var c = settings.hotkey; if on { c.mods.insert(m) } else { c.mods.remove(m) }; settings.hotkey = c }
+                            ))
+                        }
+                    }
+                    Picker("Plus key", selection: Binding(
+                        get: { settings.hotkey.key },
+                        set: { k in var c = settings.hotkey; c.key = k; settings.hotkey = c }
+                    )) {
+                        ForEach(PlainKey.allCases) { Text($0.label).tag($0) }
+                    }
                 }
                 if settings.hotkey.mods.contains(.fn) {
                     Text("Set System Settings → Keyboard → “Press 🌐 key to” = Do Nothing, or macOS will open emoji/dictation too.")
@@ -158,5 +170,49 @@ struct HistoryView: View {
             HStack { Spacer(); Button("Clear history") { history.clear() } }.padding(8)
         }
         .frame(width: 520, height: 420)
+    }
+}
+
+
+/// Captures a chord from the keyboard while the Settings window is key: hold modifiers (left/right-aware),
+/// optionally press an F-key, release everything to finish. Esc cancels.
+final class ShortcutRecorder: ObservableObject {
+    @Published var isRecording = false
+    @Published var held: Set<ModKey> = []
+    private var key: PlainKey = .none
+    private var monitor: Any?
+    private var onDone: ((HotkeyCombo) -> Void)?
+
+    var previewLabel: String { HotkeyCombo(mods: held, key: key).label }
+
+    func start(_ done: @escaping (HotkeyCombo) -> Void) {
+        onDone = done; held = []; key = .none; isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] ev in
+            self?.handle(ev); return nil
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil; isRecording = false; held = []; key = .none; onDone = nil
+    }
+
+    private func handle(_ ev: NSEvent) {
+        let raw = ev.cgEvent?.flags.rawValue ?? UInt64(ev.modifierFlags.rawValue)
+        let now = Set(ModKey.allCases.filter { raw & $0.deviceMask != 0 })
+        if ev.type == .keyDown {
+            if ev.keyCode == 53 { stop(); return }                     // Esc cancels
+            if let k = PlainKey.from(keyCode: ev.keyCode) { key = k; finish(); return }
+            return                                                      // other keys are not supported as the trigger
+        }
+        held.formUnion(now)
+        if now.isEmpty, !held.isEmpty { finish() }                      // everything released → done
+    }
+
+    private func finish() {
+        let combo = HotkeyCombo(mods: held, key: key)
+        let done = onDone
+        stop()
+        if combo.isValid { done?(combo) }
     }
 }

@@ -8,6 +8,8 @@ final class HotkeyMonitor {
     var onRelease: (() -> Void)?
     var onEscape: (() -> Bool)?   // return true to swallow
     var combo: HotkeyCombo = .standard
+    /// While true (Settings is recording a shortcut) the chord never fires.
+    var suspended = false
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -56,6 +58,7 @@ final class HotkeyMonitor {
             return Unmanaged.passUnretained(event)
         }
 
+        if suspended { return Unmanaged.passUnretained(event) }
         return handleChord(type: type, event: event, keyCode: keyCode)
     }
 
