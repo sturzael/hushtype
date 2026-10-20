@@ -35,7 +35,7 @@ import UniformTypeIdentifiers
 
 @MainActor func renderOverlay(dir: String) {
     let states: [(String, OverlayModel.Phase)] = [
-        ("listening", .listening), ("transcribing", .transcribing), ("cleaning", .cleaning),
+        ("idle", .idle), ("listening", .listening), ("transcribing", .transcribing), ("cleaning", .cleaning),
         ("done", .done("Hey Smriti, can you check the Pinnacle HubSpot sync before standup?")),
         ("error", .error("Speech model is still loading. Try again in a moment."))]
     for (name, phase) in states {
