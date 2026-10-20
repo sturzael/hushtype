@@ -19,6 +19,19 @@ final class OverlayModel: ObservableObject {
     func resetLevels() { levels = Array(repeating: 0.05, count: 28) }
 }
 
+/// Palette lifted from the MorrisPill lozenge (navy-slate ink, hairline, mint / amber / red status colours).
+enum Ink {
+    static let bg = Color(red: 0.115, green: 0.125, blue: 0.185)
+    static let line = Color.white.opacity(0.09)
+    static let text = Color(red: 0.91, green: 0.92, blue: 0.94)      // #E8EBF0
+    static let muted = Color(red: 0.56, green: 0.59, blue: 0.66)     // #8E96A8
+    static let mint = Color(red: 0.62, green: 0.91, blue: 0.69)      // #9FE7AF
+    static let amber = Color(red: 0.91, green: 0.70, blue: 0.42)     // #E8B36A
+    static let red = Color(red: 0.90, green: 0.54, blue: 0.50)       // #E58A80
+    /// The MorrisPill open/close curve.
+    static let morph = Animation.timingCurve(0.2, 0.9, 0.3, 1.0, duration: 0.24)
+}
+
 struct OverlayView: View {
     @ObservedObject var model: OverlayModel
 
@@ -42,8 +55,9 @@ struct OverlayView: View {
     private var isLit: Bool {
         switch model.phase { case .listening, .transcribing, .cleaning, .done, .error: return true; default: return false }
     }
+    private var docked: Bool { position == .rightEdge }
 
-    /// The idle tab hugs the screen edge it is docked to; the active pill floats just off it.
+    /// Rounded rect, squared on whichever screen edge it is docked against.
     private var shape: PillShape {
         switch position {
         case .bottomCenter: return PillShape(squareRight: false, squareBottom: isIdle)
@@ -53,11 +67,9 @@ struct OverlayView: View {
     }
 
     private var pillBackground: some View {
-        let accent = Color(red: 1, green: 0.42, blue: 0.3)
-        let fill: Color = isLit ? Color(red: 0.11, green: 0.10, blue: 0.11) : Color(red: 0.24, green: 0.24, blue: 0.27)
-        return shape.fill(fill.opacity(isLit ? 0.96 : 0.85))
-            .overlay(shape.strokeBorder(isLit ? accent.opacity(0.75) : Color.white.opacity(0.12), lineWidth: 1))
-            .shadow(color: isLit ? accent.opacity(0.45) : .black.opacity(0.25), radius: isLit ? 14 : 4, y: 1)
+        shape.fill(Ink.bg)
+            .overlay(shape.strokeBorder(Ink.line, lineWidth: 1))
+            .shadow(color: .black.opacity(isLit ? 0.4 : 0.3), radius: isLit ? 12 : 6, y: 2)
     }
 
     private var phaseKey: String {
@@ -69,43 +81,55 @@ struct OverlayView: View {
 
     private func words(_ s: String) -> some View {
         Text(s)
-            .font(.system(size: 15, weight: .medium))
+            .font(.system(size: 13.5))
             .lineLimit(1)
             .truncationMode(.head)   // like Willow: the newest words stay visible, the start scrolls off
-            .foregroundStyle(.white)
+            .foregroundStyle(Ink.text)
+    }
+
+    /// Idle glyph: three still bars, mint once the model is loaded.
+    private var glyph: some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach([6, 12, 8], id: \.self) { h in
+                RoundedRectangle(cornerRadius: 1.25).fill(model.ready ? Ink.mint : Ink.muted).frame(width: 2.5, height: CGFloat(h))
+            }
+        }
     }
 
     private var pill: some View {
         HStack(spacing: 10) {
             switch model.phase {
             case .idle:
-                Color.clear.frame(width: 36, height: 6)
+                glyph.frame(width: docked ? 14 : 28, height: docked ? 36 : 12)
             case .listening:
                 Waveform(levels: Array(model.levels.suffix(14))).frame(height: 18)
                 if !model.liveText.isEmpty { words(model.liveText) }
-            case .transcribing, .cleaning:
-                Spinner()
+            case .transcribing:
+                ThinkingDots(color: Ink.mint)
+                if !model.liveText.isEmpty { words(model.liveText + "…") }
+            case .cleaning:
+                ThinkingDots(color: Ink.amber)
                 if !model.liveText.isEmpty { words(model.liveText + "…") }
             case .done(let text):
-                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(Ink.mint)
                 words(text)
             case .error(let msg):
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                Text(msg).font(.system(size: 13)).lineLimit(2).foregroundStyle(.white)
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Ink.red)
+                Text(msg).font(.system(size: 13)).lineLimit(2).foregroundStyle(Ink.text)
             case .hidden:
                 EmptyView()
             }
         }
         .id(phaseKey)
         .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: unitAnchor)))
-        .padding(.horizontal, isIdle ? 10 : 16)
-        .padding(.vertical, isIdle ? 5 : 11)
+        .padding(.horizontal, isIdle ? 8 : 14)
+        .padding(.vertical, isIdle ? 8 : 10)
         .background(pillBackground)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.liveText)
+        .animation(Ink.morph, value: model.liveText)
         .padding(.top, 20)
         .padding(.leading, 20)
-        .padding(.bottom, (isIdle && position != .rightEdge) ? 0 : 16)   // tab sits on the edge; pill floats above it
-        .padding(.trailing, position == .bottomCenter ? 20 : 0)           // flush against the right screen edge
+        .padding(.bottom, (isIdle && !docked) ? 0 : 16)   // bottom tab sits on the edge; the pill floats above it
+        .padding(.trailing, position == .bottomCenter ? 20 : 0)   // flush against the right screen edge
         .opacity(model.phase == .hidden ? 0 : 1)
     }
 }
@@ -118,7 +142,7 @@ struct PillShape: InsettableShape {
     func inset(by amount: CGFloat) -> PillShape { var c = self; c.inset += amount; return c }
     func path(in rect: CGRect) -> Path {
         let r = rect.insetBy(dx: inset, dy: inset)
-        let radius = r.height / 2
+        let radius = min(14, r.height / 2)
         return Path(roundedRect: r, cornerRadii: RectangleCornerRadii(
             topLeading: radius,
             bottomLeading: squareBottom ? 0 : radius,
@@ -133,7 +157,7 @@ struct Waveform: View {
         HStack(alignment: .center, spacing: 2) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, l in
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color(red: 1, green: 0.42, blue: 0.3))
+                    .fill(Ink.mint)
                     .frame(width: 2.5, height: max(3, CGFloat(l) * 18))
             }
         }
@@ -141,13 +165,24 @@ struct Waveform: View {
     }
 }
 
-/// Red recording dot that breathes. Animation is scoped to the dot so it cannot leak into siblings.
-struct PulsingDot: View {
+/// MorrisPill's "thinking" dots: three dots breathing in sequence. Each animation is scoped to its own dot.
+struct ThinkingDots: View {
+    var color: Color
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { i in BreathingDot(color: color, delay: Double(i) * 0.18) }
+        }
+    }
+}
+
+struct BreathingDot: View {
+    var color: Color
+    var delay: Double
     @State private var on = false
     var body: some View {
-        Circle().fill(Color.red).frame(width: 8, height: 8)
-            .opacity(on ? 0.35 : 1)
-            .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: on)
+        Circle().fill(color).frame(width: 5, height: 5)
+            .opacity(on ? 1 : 0.2)
+            .animation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true).delay(delay), value: on)
             .onAppear { on = true }
     }
 }
@@ -194,7 +229,7 @@ final class OverlayPanel: NSPanel {
     func show(_ phase: OverlayModel.Phase) {
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         if !isVisible || screen != placedOn { layout(on: screen); placedOn = screen }
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+        withAnimation(Ink.morph) {
             model.phase = phase
             if phase == .idle || phase == .hidden { model.liveText = "" }
         }
@@ -226,8 +261,8 @@ final class OverlayPanel: NSPanel {
             setFrame(NSRect(x: f.midX - width / 2, y: f.minY, width: width, height: height), display: false)
         case .bottomRight:
             setFrame(NSRect(x: f.maxX - width, y: f.minY, width: width, height: height), display: false)
-        case .rightEdge:
-            setFrame(NSRect(x: f.maxX - width, y: f.midY - height / 2, width: width, height: height), display: false)
+        case .rightEdge:   // slightly above centre, where the MorrisPill lozenge sat
+            setFrame(NSRect(x: f.maxX - width, y: f.midY + f.height * 0.05 - height / 2, width: width, height: height), display: false)
         }
     }
 }

@@ -142,7 +142,7 @@ final class Settings: ObservableObject {
         inputDeviceUID = d.string(forKey: "inputDeviceUID") ?? ""
         showIdlePill = d.object(forKey: "showIdlePill") as? Bool ?? true
         livePreview = d.object(forKey: "livePreview") as? Bool ?? true
-        pillPosition = PillPosition(rawValue: d.string(forKey: "pillPosition") ?? "") ?? .bottomRight
+        pillPosition = PillPosition(rawValue: d.string(forKey: "pillPosition") ?? "") ?? .rightEdge
     }
 
     /// Picks up ANTHROPIC_API_KEY from the environment on first launch so there is nothing to paste.

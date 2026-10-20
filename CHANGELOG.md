@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- New look for the bar: navy-slate ink, hairline border, mint waveform and status colours (mint / amber / red); idle is a small vertical lozenge docked to the right screen edge just above centre (new default position).
 - Live transcript in the pill while you hold the key (Willow-style): words appear as you speak, newest words stay visible. Toggle under Settings → General → "Show words in the pill while you speak".
 - Idle state is a small tab that hugs the screen edge; the pill floats just above it while active.
 - Fixed a crash when changing the pill position / idle-tab settings while the overlay was on screen (Swift exclusivity abort inside SwiftUI layout).
