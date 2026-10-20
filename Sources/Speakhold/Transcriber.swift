@@ -33,8 +33,11 @@ actor Transcriber {
                 }
             )
             set(.loading)
+            // Keep the tokenizer next to the model: WhisperKit's default is ~/Documents/huggingface, which
+            // needs the Files & Folders permission for a bundled app and fails with "could not remove corrupted metadata".
             let config = WhisperKitConfig(
                 modelFolder: folder.path,
+                tokenizerFolder: base,
                 verbose: false,
                 logLevel: .error,
                 prewarm: true,
