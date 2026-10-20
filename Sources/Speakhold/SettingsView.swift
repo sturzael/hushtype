@@ -87,6 +87,7 @@ struct SettingsView: View {
                 TextField("Language code (blank = auto-detect)", text: $settings.language)
             }
             Section {
+                Toggle("Always show the small pill at the bottom of the screen", isOn: $settings.showIdlePill)
                 Toggle("Play sounds on start / stop", isOn: $settings.playSounds)
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in

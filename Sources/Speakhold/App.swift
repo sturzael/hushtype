@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireRecorder()
         wireHotkeys()
         Task { await self.loadModel() }
+        overlay.hide()   // shows the idle pill if enabled
         refreshPermissions()
         status.runMicTest = { [weak self] in self?.micTest() }
         status.suspendHotkey = { [weak self] on in self?.hotkeys.suspended = on }
@@ -159,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if hotkeys.combo != Settings.shared.hotkey {
             hotkeys.combo = Settings.shared.hotkey
         }
+        if !isRecording, !busy { overlay.hide() }   // apply the idle-pill toggle immediately
         Task { await self.loadModel() }
     }
 
@@ -170,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .idle: self?.status.modelStatus = "Not loaded"
                 case .downloading(let p): self?.status.modelStatus = p < 0.01 ? "Checking model…" : "Downloading \(Int(p * 100))%"
                 case .loading: self?.status.modelStatus = "Loading into memory…"
-                case .ready: self?.status.modelStatus = "Ready"
+                case .ready: self?.status.modelStatus = "Ready"; self?.overlay.model.ready = true
                 case .failed(let e): self?.status.modelStatus = "Failed: \(e)"
                 }
             }

@@ -3,7 +3,9 @@ import SwiftUI
 
 /// Floating pill at the bottom of the screen, like Willow's. Non-activating so focus stays in the target app.
 final class OverlayModel: ObservableObject {
-    enum Phase: Equatable { case hidden, listening, transcribing, cleaning, done(String), error(String) }
+    enum Phase: Equatable { case hidden, idle, listening, transcribing, cleaning, done(String), error(String) }
+    /// Speech model loaded; the idle dot turns from grey to coral.
+    @Published var ready = false
     @Published var phase: Phase = .hidden
     @Published var levels: [Float] = Array(repeating: 0.05, count: 28)
 
@@ -20,6 +22,14 @@ struct OverlayView: View {
     var body: some View {
         HStack(spacing: 10) {
             switch model.phase {
+            case .idle:
+                Circle().fill(model.ready ? Color(red: 1, green: 0.42, blue: 0.3) : Color.gray).frame(width: 7, height: 7)
+                HStack(spacing: 2) {
+                    ForEach(0..<9, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 1).fill(Color.white.opacity(0.7))
+                            .frame(width: 2, height: [4, 8, 12, 7, 10, 6, 11, 8, 4][i])
+                    }
+                }.frame(height: 12)
             case .listening:
                 PulsingDot()
                 Waveform(levels: model.levels)
@@ -43,8 +53,8 @@ struct OverlayView: View {
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, model.phase == .idle ? 11 : 16)
+        .padding(.vertical, model.phase == .idle ? 7 : 10)
         .background(
             Capsule().fill(Color.black.opacity(0.82))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
@@ -120,9 +130,14 @@ final class OverlayPanel: NSPanel {
         if !isVisible { orderFrontRegardless() }
     }
 
+    /// Returns to the idle state: a small always-on pill if enabled, otherwise hidden.
     func hide() {
-        model.phase = .hidden
-        orderOut(nil)
+        if Settings.shared.showIdlePill {
+            show(.idle)
+        } else {
+            model.phase = .hidden
+            orderOut(nil)
+        }
     }
 
     private func layoutAtBottomCenter() {

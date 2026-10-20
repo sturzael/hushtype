@@ -108,6 +108,7 @@ final class Settings: ObservableObject {
     @Published var playSounds: Bool { didSet { d.set(playSounds, forKey: "playSounds") } }
     @Published var language: String { didSet { d.set(language, forKey: "language") } }
     @Published var inputDeviceUID: String { didSet { d.set(inputDeviceUID, forKey: "inputDeviceUID") } }
+    @Published var showIdlePill: Bool { didSet { d.set(showIdlePill, forKey: "showIdlePill") } }
 
     private init() {
         if let data = d.data(forKey: "hotkeyCombo"), let c = try? JSONDecoder().decode(HotkeyCombo.self, from: data), c.isValid {
@@ -125,6 +126,7 @@ final class Settings: ObservableObject {
         playSounds = d.object(forKey: "playSounds") as? Bool ?? true
         language = d.string(forKey: "language") ?? "en"
         inputDeviceUID = d.string(forKey: "inputDeviceUID") ?? ""
+        showIdlePill = d.object(forKey: "showIdlePill") as? Bool ?? true
     }
 
     /// Picks up ANTHROPIC_API_KEY from the environment on first launch so there is nothing to paste.
