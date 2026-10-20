@@ -15,8 +15,8 @@ labels: bug
 **Environment**
 - macOS version:
 - Mac model (chip):
-- Hushtype version / commit:
+- Speakhold version / commit:
 - Whisper model selected:
 - App you were pasting into:
 
-**Logs** (optional): `log show --last 5m --predicate 'process == "Hushtype"'`
+**Logs** (optional): `log show --last 5m --predicate 'process == "Speakhold"'`

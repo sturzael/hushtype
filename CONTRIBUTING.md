@@ -1,13 +1,13 @@
-# Contributing to Hushtype
+# Contributing to Speakhold
 
-Thanks for looking. Hushtype is small on purpose; please keep it that way.
+Thanks for looking. Speakhold is small on purpose; please keep it that way.
 
 ## Setup
 
 ```bash
-git clone https://github.com/sturzael/hushtype.git && cd hushtype
-swift build            # debug build in .build/debug/Hushtype
-./build.sh             # release .app → ~/Applications/Hushtype.app
+git clone https://github.com/sturzael/speakhold.git && cd speakhold
+swift build            # debug build in .build/debug/Speakhold
+./build.sh             # release .app → ~/Applications/Speakhold.app
 ```
 
 Open `Package.swift` in Xcode if you prefer an IDE. There is no Xcode project to keep in sync.
@@ -15,7 +15,7 @@ Open `Package.swift` in Xcode if you prefer an IDE. There is no Xcode project to
 ## Layout
 
 ```
-Sources/Hushtype/
+Sources/Speakhold/
   main.swift          entry point + headless check modes
   App.swift           AppDelegate: menu bar, recording flow, windows
   HotkeyMonitor.swift CGEvent tap; chord matching with left/right-specific modifier bits
@@ -26,7 +26,7 @@ Sources/Hushtype/
   Overlay.swift       floating pill: NSPanel + SwiftUI waveform
   SettingsView.swift  settings + history windows
   Settings.swift      UserDefaults-backed preferences
-  History.swift       last 200 transcripts in ~/Library/Application Support/Hushtype
+  History.swift       last 200 transcripts in ~/Library/Application Support/Speakhold
 Resources/            Info.plist, AppIcon.icns
 build.sh              bundle + sign + install
 ```
@@ -36,20 +36,20 @@ build.sh              bundle + sign + install
 No test target yet, but every subsystem can be exercised without clicking:
 
 ```bash
-.build/release/Hushtype --test-hotkey                 # synthetic chord events → expects press/release
-.build/release/Hushtype --transcribe clip.aiff        # downloads model if needed, prints RAW (and CLEAN if a key is set)
+.build/release/Speakhold --test-hotkey                 # synthetic chord events → expects press/release
+.build/release/Speakhold --transcribe clip.aiff        # downloads model if needed, prints RAW (and CLEAN if a key is set)
 say -o clip.aiff "testing one two three"              # quick way to make a clip
-.build/release/Hushtype --render-overlay /tmp/pills   # PNG of each pill state
-.build/release/Hushtype --render-gif docs/demo.gif    # README animation
+.build/release/Speakhold --render-overlay /tmp/pills   # PNG of each pill state
+.build/release/Speakhold --render-gif docs/demo.gif    # README animation
 DICTATE_DEBUG=1 … --transcribe …                      # logs sample counts and segments
 ```
 
 ## Signing
 
-`build.sh` signs with `HUSHTYPE_SIGN_IDENTITY` if set, otherwise with a self-signed certificate named `Hushtype Dev` if one is in your login keychain, otherwise ad-hoc. Ad-hoc signatures change every build, so macOS drops the Accessibility and Microphone grants on each rebuild; any stable identity (even an untrusted self-signed one) keeps them. To make one without the GUI:
+`build.sh` signs with `SPEAKHOLD_SIGN_IDENTITY` if set, otherwise with a self-signed certificate named `Speakhold Dev` if one is in your login keychain, otherwise ad-hoc. Ad-hoc signatures change every build, so macOS drops the Accessibility and Microphone grants on each rebuild; any stable identity (even an untrusted self-signed one) keeps them. To make one without the GUI:
 
 ```bash
-openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -days 3650 -subj '/CN=Hushtype Dev' \
+openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -days 3650 -subj '/CN=Speakhold Dev' \
   -addext 'keyUsage=critical,digitalSignature' -addext 'extendedKeyUsage=critical,codeSigning'
 openssl pkcs12 -export -out h.p12 -inkey k.pem -in c.pem -passout pass:x -legacy
 security import h.p12 -k ~/Library/Keychains/login.keychain-db -P x -T /usr/bin/codesign && rm k.pem h.p12

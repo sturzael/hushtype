@@ -10,7 +10,7 @@ struct Cleanup {
         guard !apiKey.isEmpty, !raw.isEmpty else { return raw }
 
         var system = """
-        You clean up hushtyped speech into polished written text. Output ONLY the cleaned text: no preamble, no quotes, no commentary, no markdown unless the speaker clearly hushtyped a list.
+        You clean up speakholdd speech into polished written text. Output ONLY the cleaned text: no preamble, no quotes, no commentary, no markdown unless the speaker clearly speakholdd a list.
 
         Rules:
         - Remove fillers (um, uh, like, you know), false starts, and repeated words.
@@ -47,7 +47,7 @@ struct Cleanup {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 let msg = String(data: data, encoding: .utf8) ?? ""
-                NSLog("Hushtype cleanup HTTP error: %@", msg)
+                NSLog("Speakhold cleanup HTTP error: %@", msg)
                 return raw
             }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return raw }
@@ -57,7 +57,7 @@ struct Cleanup {
             let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return cleaned.isEmpty ? raw : cleaned
         } catch {
-            NSLog("Hushtype cleanup failed: %@", error.localizedDescription)
+            NSLog("Speakhold cleanup failed: %@", error.localizedDescription)
             return raw
         }
     }

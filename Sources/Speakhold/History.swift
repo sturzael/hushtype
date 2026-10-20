@@ -13,7 +13,7 @@ final class History: ObservableObject {
     private let url: URL
 
     private init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Hushtype")
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Speakhold")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         url = dir.appendingPathComponent("history.json")
         if let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode([HistoryItem].self, from: data) {

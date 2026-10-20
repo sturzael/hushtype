@@ -126,7 +126,7 @@ struct SettingsView: View {
                 row("Accessibility (hotkey + paste)", ok: status.axOK) {
                     Paster.promptAccessibility(); Paster.openAccessibilityPane()
                 }
-                Text("After granting Accessibility, quit and relaunch Hushtype if the hotkey does not respond.")
+                Text("After granting Accessibility, quit and relaunch Speakhold if the hotkey does not respond.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

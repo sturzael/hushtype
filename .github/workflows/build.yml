@@ -15,16 +15,16 @@ jobs:
       - name: Build
         run: swift build -c release
       - name: Hotkey chord check
-        run: .build/release/Hushtype --test-hotkey
+        run: .build/release/Speakhold --test-hotkey
       - name: Bundle
         run: |
-          mkdir -p dist/Hushtype.app/Contents/MacOS dist/Hushtype.app/Contents/Resources
-          cp .build/release/Hushtype dist/Hushtype.app/Contents/MacOS/
-          cp Resources/Info.plist dist/Hushtype.app/Contents/
-          cp Resources/AppIcon.icns dist/Hushtype.app/Contents/Resources/
-          codesign --force --deep --sign - dist/Hushtype.app
-          cd dist && ditto -c -k --keepParent Hushtype.app Hushtype.app.zip
+          mkdir -p dist/Speakhold.app/Contents/MacOS dist/Speakhold.app/Contents/Resources
+          cp .build/release/Speakhold dist/Speakhold.app/Contents/MacOS/
+          cp Resources/Info.plist dist/Speakhold.app/Contents/
+          cp Resources/AppIcon.icns dist/Speakhold.app/Contents/Resources/
+          codesign --force --deep --sign - dist/Speakhold.app
+          cd dist && ditto -c -k --keepParent Speakhold.app Speakhold.app.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Hushtype.app
-          path: dist/Hushtype.app.zip
+          name: Speakhold.app
+          path: dist/Speakhold.app.zip

@@ -2,18 +2,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "Hushtype",
+    name: "Speakhold",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
     ],
     targets: [
         .executableTarget(
-            name: "Hushtype",
+            name: "Speakhold",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ],
-            path: "Sources/Hushtype"
+            path: "Sources/Speakhold"
         ),
     ]
 )

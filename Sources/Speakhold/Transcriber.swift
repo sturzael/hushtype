@@ -19,7 +19,7 @@ actor Transcriber {
         set(.downloading(0))
         do {
             let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("Hushtype/models")
+                .appendingPathComponent("Speakhold/models")
             try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
             let folder = try await WhisperKit.download(
                 variant: model,
@@ -50,7 +50,7 @@ actor Transcriber {
     }
 
     func transcribe(_ samples: [Float], language: String, promptTerms: [String]) async throws -> String {
-        guard let kit else { throw NSError(domain: "Hushtype", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
+        guard let kit else { throw NSError(domain: "Speakhold", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
         // Whisper needs at least ~1 s; pad very short clips with silence.
         var audio = samples
         if audio.count < 16_000 { audio.append(contentsOf: [Float](repeating: 0, count: 16_000 - audio.count)) }
@@ -78,7 +78,7 @@ actor Transcriber {
 
     /// Test hook: transcribe an audio file on disk (any format AVFoundation reads).
     func transcribeFile(_ path: String, language: String, promptTerms: [String]) async throws -> String {
-        guard let kit else { throw NSError(domain: "Hushtype", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
+        guard let kit else { throw NSError(domain: "Speakhold", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
         let buffer = try AudioProcessor.loadAudio(fromPath: path)
         let samples = AudioProcessor.convertBufferToArray(buffer: buffer)
         return try await transcribe(samples, language: language, promptTerms: promptTerms)

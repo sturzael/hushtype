@@ -33,11 +33,11 @@ final class AudioRecorder {
             var id = devID
             let status = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
                                               &id, UInt32(MemoryLayout<AudioDeviceID>.size))
-            if status != noErr { NSLog("Hushtype: could not select input device (%d), using default", status) }
+            if status != noErr { NSLog("Speakhold: could not select input device (%d), using default", status) }
         }
         let inFormat = input.outputFormat(forBus: 0)
         guard inFormat.sampleRate > 0 else {
-            throw NSError(domain: "Hushtype", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input available."])
+            throw NSError(domain: "Speakhold", code: 1, userInfo: [NSLocalizedDescriptionKey: "No microphone input available."])
         }
         let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
         converter = AVAudioConverter(from: inFormat, to: outFormat)

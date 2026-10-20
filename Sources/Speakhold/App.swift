@@ -70,13 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "h")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Hushtype", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Speakhold", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
     }
 
     private func setIcon(recording: Bool) {
         let name = recording ? "waveform.circle.fill" : "waveform"
-        let img = NSImage(systemSymbolName: name, accessibilityDescription: "Hushtype")
+        let img = NSImage(systemSymbolName: name, accessibilityDescription: "Speakhold")
         img?.isTemplate = !recording
         statusItem.button?.image = img
         statusItem.button?.contentTintColor = recording ? .systemRed : nil
@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() {
         if settingsWindow == nil {
             let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            w.title = "Hushtype Settings"
+            w.title = "Speakhold Settings"
             w.contentView = NSHostingView(rootView: SettingsView(status: status))
             w.isReleasedWhenClosed = false
             w.center()

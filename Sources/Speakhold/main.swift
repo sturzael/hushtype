@@ -3,7 +3,7 @@ import SwiftUI
 import ImageIO
 import UniformTypeIdentifiers
 
-/// `Hushtype --render-gif out.gif` writes an animated demo of the pill for the README.
+/// `Speakhold --render-gif out.gif` writes an animated demo of the pill for the README.
 @MainActor func renderGif(path: String) {
     let m = OverlayModel()
     var frames: [CGImage] = []
@@ -52,7 +52,7 @@ import UniformTypeIdentifiers
     }
 }
 
-// `Hushtype --transcribe file.wav [--no-cleanup]` runs the pipeline headless and prints the result.
+// `Speakhold --transcribe file.wav [--no-cleanup]` runs the pipeline headless and prints the result.
 let args = CommandLine.arguments
 if let i = args.firstIndex(of: "--transcribe"), i + 1 < args.count {
     let path = args[i + 1]
@@ -77,13 +77,13 @@ if let i = args.firstIndex(of: "--transcribe"), i + 1 < args.count {
     exit(0)
 }
 
-// `Hushtype --render-overlay dir` renders the pill in each state to PNGs (layout check without screen access).
+// `Speakhold --render-overlay dir` renders the pill in each state to PNGs (layout check without screen access).
 if let i = args.firstIndex(of: "--render-overlay"), i + 1 < args.count {
     MainActor.assumeIsolated { renderOverlay(dir: args[i + 1]) }
     exit(0)
 }
 
-// `Hushtype --test-hotkey` feeds synthetic flag events through the chord matcher.
+// `Speakhold --test-hotkey` feeds synthetic flag events through the chord matcher.
 if args.contains("--test-hotkey") {
     let m = HotkeyMonitor()
     m.combo = HotkeyCombo(mods: [.lctrl, .lopt], key: .none)
