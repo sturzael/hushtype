@@ -20,6 +20,22 @@ struct OverlayView: View {
     @ObservedObject var model: OverlayModel
 
     var body: some View {
+        let flush = Settings.shared.pillPosition != .bottomCenter
+        ZStack(alignment: flush ? .bottomTrailing : .bottom) {
+            Color.clear
+            pill
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: flush ? .bottomTrailing : .bottom)
+    }
+
+    private var phaseKey: String {
+        switch model.phase {
+        case .hidden: return "hidden"; case .idle: return "idle"; case .listening: return "listening"
+        case .transcribing: return "transcribing"; case .cleaning: return "cleaning"; case .done: return "done"; case .error: return "error"
+        }
+    }
+
+    private var pill: some View {
         HStack(spacing: 10) {
             switch model.phase {
             case .idle:
@@ -52,6 +68,8 @@ struct OverlayView: View {
                 EmptyView()
             }
         }
+        .id(phaseKey)
+        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: Settings.shared.pillPosition == .bottomCenter ? .bottom : .bottomTrailing)))
         .foregroundStyle(.white)
         .padding(.horizontal, model.phase == .idle ? 11 : 16)
         .padding(.vertical, model.phase == .idle ? 7 : 10)
@@ -63,7 +81,7 @@ struct OverlayView: View {
         .padding(.vertical, 20)
         .padding(.leading, 20)
         .padding(.trailing, Settings.shared.pillPosition == .bottomCenter ? 20 : 0)   // flush against the right screen edge
-        .animation(.easeInOut(duration: 0.18), value: model.phase)
+        .opacity(model.phase == .hidden ? 0 : 1)
     }
 }
 
@@ -122,7 +140,7 @@ final class OverlayPanel: NSPanel {
     let model = OverlayModel()
 
     init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 420, height: 80),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 640, height: 110),
                    styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered, defer: false)
         isFloatingPanel = true
@@ -139,35 +157,40 @@ final class OverlayPanel: NSPanel {
         contentView = host
     }
 
+    private var placedOn: NSScreen?
+
+    /// Settings changed position: re-pin the panel.
+    func relayout() { placedOn = nil }
+
     func show(_ phase: OverlayModel.Phase) {
-        model.phase = phase
-        layoutAtBottomCenter()
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+        if !isVisible || screen != placedOn { layout(on: screen); placedOn = screen }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { model.phase = phase }
         if !isVisible { orderFrontRegardless() }
     }
 
-    /// Returns to the idle state: a small always-on pill if enabled, otherwise hidden.
+    /// Returns to the idle state: a small always-on pill if enabled, otherwise fades out.
     func hide() {
         if Settings.shared.showIdlePill {
             show(.idle)
         } else {
-            model.phase = .hidden
-            orderOut(nil)
+            withAnimation(.easeOut(duration: 0.2)) { model.phase = .hidden }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard let self, self.model.phase == .hidden else { return }
+                self.orderOut(nil)
+            }
         }
     }
 
-    private func layoutAtBottomCenter() {
-        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+    /// The panel never resizes; it is a fixed transparent box pinned to the chosen corner.
+    private func layout(on screen: NSScreen?) {
         guard let screen else { return }
-        if let host = contentView as? NSHostingView<OverlayView> {
-            let size = host.fittingSize
-            setContentSize(NSSize(width: ceil(size.width), height: ceil(size.height)))
-        }
         let f = screen.visibleFrame
         switch Settings.shared.pillPosition {
         case .bottomCenter:
-            setFrameOrigin(NSPoint(x: f.midX - frame.width / 2, y: f.minY + 24))
+            setFrameOrigin(NSPoint(x: f.midX - frame.width / 2, y: f.minY + 4))
         case .bottomRight:
-            setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.minY + 24))
+            setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.minY + 4))
         case .rightEdge:
             setFrameOrigin(NSPoint(x: f.maxX - frame.width, y: f.midY - frame.height / 2))
         }

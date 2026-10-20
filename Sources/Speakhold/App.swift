@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if hotkeys.combo != Settings.shared.hotkey {
             hotkeys.combo = Settings.shared.hotkey
         }
-        if !isRecording, !busy { overlay.hide() }   // apply the idle-pill / position settings immediately
+        if !isRecording, !busy { overlay.relayout(); overlay.hide() }   // apply the idle-pill / position settings immediately
         Task { await self.loadModel() }
     }
 
