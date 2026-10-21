@@ -88,25 +88,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         if settingsWindow == nil {
-            let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            w.title = "Speakhold Settings"
-            w.contentView = NSHostingView(rootView: SettingsView(status: status))
-            w.isReleasedWhenClosed = false
-            w.center()
-            settingsWindow = w
+            settingsWindow = AppDelegate.inkWindow(title: "Speakhold Settings", root: SettingsView(status: status))
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
+    /// A window in the pill's language: ink background, dark controls, the title bar dissolved into the content so
+    /// the sidebar runs under the traffic lights. Shared by Settings and History.
+    static func inkWindow<V: View>(title: String, root: V, resizable: Bool = false) -> NSWindow {
+        var mask: NSWindow.StyleMask = [.titled, .closable, .fullSizeContentView]
+        if resizable { mask.insert(.resizable) }
+        let w = NSWindow(contentRect: .zero, styleMask: mask, backing: .buffered, defer: false)
+        w.title = title
+        w.titlebarAppearsTransparent = true
+        w.titleVisibility = .hidden
+        w.isMovableByWindowBackground = true
+        w.appearance = NSAppearance(named: .darkAqua)
+        w.backgroundColor = NSColor(Ink.bg)
+        w.contentView = NSHostingView(rootView: root)
+        w.isReleasedWhenClosed = false
+        w.center()
+        return w
+    }
+
     @objc private func openHistory() {
         if historyWindow == nil {
-            let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-            w.title = "Dictation History"
-            w.contentView = NSHostingView(rootView: HistoryView())
-            w.isReleasedWhenClosed = false
-            w.center()
-            historyWindow = w
+            historyWindow = AppDelegate.inkWindow(title: "Dictation History", root: HistoryView(), resizable: true)
         }
         NSApp.activate(ignoringOtherApps: true)
         historyWindow?.makeKeyAndOrderFront(nil)

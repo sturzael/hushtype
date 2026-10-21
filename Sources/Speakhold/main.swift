@@ -55,6 +55,39 @@ import UniformTypeIdentifiers
     }
 }
 
+/// `Speakhold --render-settings dir` draws each settings tab (and History) through AppKit's offscreen cache so the
+/// window layout can be checked without a display grant. ImageRenderer cannot draw native controls, hence the window.
+@MainActor func renderSettings(dir: String) {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let status = AppStatus()
+    status.modelStatus = "Ready"; status.micOK = true; status.axOK = false; status.micLevel = 0.62
+    status.micTest = "Heard: “testing one two three”"
+    var shots: [(String, NSWindow)] = SettingsTab.allCases.map {
+        ($0.rawValue, AppDelegate.inkWindow(title: "Speakhold Settings", root: SettingsView(status: status, tab: $0, scrolls: false)))
+    }
+    shots.append(("history", AppDelegate.inkWindow(title: "Dictation History", root: HistoryView(), resizable: true)))
+    for (name, w) in shots {
+        w.orderFrontRegardless()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+        guard let v = w.contentView, let layer = v.layer else { print("no view", name); continue }
+        let scale = w.backingScaleFactor
+        let size = CGSize(width: v.bounds.width * scale, height: v.bounds.height * scale)
+        guard let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { continue }
+        ctx.translateBy(x: 0, y: size.height)   // CALayer renders flipped into a CG context
+        ctx.scaleBy(x: scale, y: -scale)
+        layer.render(in: ctx)
+        guard let cg = ctx.makeImage() else { continue }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        if let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: dir + "/settings-\(name).png"))
+            print("wrote", name, rep.pixelsWide, rep.pixelsHigh)
+        }
+        w.close()
+    }
+}
+
 // `Speakhold --transcribe file.wav [--no-cleanup]` runs the pipeline headless and prints the result.
 let args = CommandLine.arguments
 if let i = args.firstIndex(of: "--transcribe"), i + 1 < args.count {
@@ -83,6 +116,12 @@ if let i = args.firstIndex(of: "--transcribe"), i + 1 < args.count {
 // `Speakhold --render-overlay dir` renders the pill in each state to PNGs (layout check without screen access).
 if let i = args.firstIndex(of: "--render-overlay"), i + 1 < args.count {
     MainActor.assumeIsolated { renderOverlay(dir: args[i + 1]) }
+    exit(0)
+}
+
+// `Speakhold --render-settings dir` renders the settings window tabs to PNGs.
+if let i = args.firstIndex(of: "--render-settings"), i + 1 < args.count {
+    MainActor.assumeIsolated { renderSettings(dir: args[i + 1]) }
     exit(0)
 }
 
