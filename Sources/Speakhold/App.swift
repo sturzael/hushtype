@@ -261,6 +261,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Willow-style live transcript: every ~0.8 s re-run the decoder over everything captured so far and show the
     /// result in the pill. Runs through the same actor as the final pass, so the two never overlap; the final
     /// pass simply queues behind an in-flight tick.
+    /// 15 s of 16 kHz audio: enough context for Whisper to be right about the last sentence, small enough to decode in well under the 0.8 s tick.
+    private static let previewWindowSamples = 16_000 * 15
+
     private func startLivePreview() {
         previewTask?.cancel()
         let s = Settings.shared
@@ -269,13 +272,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 800_000_000)
                 guard let self, !Task.isCancelled else { return }
-                let samples = self.recorder.snapshot()
+                let all = self.recorder.snapshot()
                 // Need a second of audio, and at least half a second of new audio since the last tick.
-                guard samples.count >= 16_000, samples.count - lastCount >= 8_000 else { continue }
-                lastCount = samples.count
+                guard all.count >= 16_000, all.count - lastCount >= 8_000 else { continue }
+                lastCount = all.count
+                // The preview only ever shows the tail of a long dictation (the bar keeps the newest words), so
+                // decode just the last `previewWindow` seconds: the cost per tick stays flat however long you talk.
+                // The final transcript after release still uses the whole recording.
+                let window = Self.previewWindowSamples
+                let samples = all.count > window ? Array(all.suffix(window)) : all
                 guard let text = try? await self.transcriber.transcribe(samples, language: s.language, promptTerms: s.dictionaryTerms, fast: true),
                       !Task.isCancelled, !text.isEmpty else { continue }
-                await MainActor.run { if self.isRecording { self.overlay.model.liveText = text } }
+                let shown = all.count > window ? "… " + text : text
+                await MainActor.run { if self.isRecording { self.overlay.model.liveText = shown } }
             }
         }
     }
