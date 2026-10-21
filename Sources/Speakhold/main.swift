@@ -38,12 +38,12 @@ import UniformTypeIdentifiers
 @MainActor func renderOverlay(dir: String) {
     let states: [(String, OverlayModel.Phase)] = [
         ("idle", .idle), ("listening", .listening), ("transcribing", .transcribing), ("cleaning", .cleaning),
-        ("done", .done("Hey Smriti, can you check the Pinnacle HubSpot sync before standup?")),
+        ("done", .done("Can you check the sync before standup?")),
         ("error", .error("Speech model is still loading. Try again in a moment."))]
     for (name, phase) in states {
         let m = OverlayModel(); m.phase = phase
         m.levels = (0..<28).map { _ in Float.random(in: 0.1...1) }
-        if phase == .listening || phase == .transcribing { m.liveText = "Hey Smriti, can you check the Pinnacle HubSpot sync" }
+        if phase == .listening || phase == .transcribing { m.liveText = "Can you check the sync before" }
         let r = ImageRenderer(content: OverlayView(model: m).background(Color(red: 0.93, green: 0.93, blue: 0.95)))
         r.scale = 2
         guard let cg = r.cgImage else { print("render failed", name); continue }
