@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Speakhold — Free, open-source push-to-talk dictation for Mac</title>
-<meta name="description" content="Speakhold is a free, open-source dictation app for macOS. Hold a key, talk, release: your words land at the cursor. Whisper runs on your Mac, nothing leaves it. A native Swift alternative to Willow Voice, Wispr Flow and Superwhisper.">
+<title>Speakhold — Free, open-source dictation and meeting notes for Mac</title>
+<meta name="description" content="Speakhold is a free, open-source dictation app for macOS. Hold a key, talk, release: your words land at the cursor. It also records both sides of a call and writes the notes. Everything runs on your Mac. A native Swift alternative to Willow Voice, Wispr Flow, Superwhisper and Fireflies.">
 <link rel="canonical" href="https://sturzael.github.io/speakhold/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Speakhold — Free, open-source push-to-talk dictation for Mac">
-<meta property="og:description" content="Hold a key, talk, release. On-device Whisper, native Swift, no subscription. Willow / Wispr Flow / Superwhisper alternative.">
+<meta property="og:title" content="Speakhold — Free, open-source dictation and meeting notes for Mac">
+<meta property="og:description" content="Hold a key, talk, release. Records your calls and writes the notes too. On-device, native Swift, no subscription.">
 <meta property="og:image" content="https://sturzael.github.io/speakhold/demo.gif">
 <meta property="og:url" content="https://sturzael.github.io/speakhold/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="icon.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Speakhold","operatingSystem":"macOS 14+","applicationCategory":"UtilitiesApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT","downloadUrl":"https://github.com/sturzael/speakhold/releases/latest","softwareVersion":"0.1.2","description":"Free, open-source push-to-talk dictation for macOS with on-device Whisper."}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Speakhold","operatingSystem":"macOS 14+","applicationCategory":"UtilitiesApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://opensource.org/licenses/MIT","downloadUrl":"https://github.com/sturzael/speakhold/releases/latest","softwareVersion":"0.1.2","description":"Free, open-source push-to-talk dictation and on-device meeting notes for macOS."}
 </script>
 <style>
   :root{--bg:#12141f;--panel:#1d202f;--text:#e8ebf0;--muted:#8e96a8;--accent:#9fe7af;--amber:#e8b36a;--line:rgba(255,255,255,.09)}
@@ -44,6 +44,8 @@
   .yes{color:var(--accent)}.no{color:#e58a80}
   footer{margin-top:64px;color:var(--muted);font-size:14px;text-align:center}
   a{color:#b9c6ff}
+  .note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:12px 16px;margin:24px 0 0;font-size:15px;color:var(--text)}
+  .note b{color:var(--accent)}
   .states{display:block;width:100%;max-width:640px;margin:8px auto 0;border-radius:14px;border:1px solid var(--line)}
   @media (max-width:600px){h1{font-size:34px}.tag{font-size:17px}}
 </style>
@@ -53,7 +55,7 @@
   <header>
     <img src="icon.png" alt="Speakhold icon">
     <h1>Speakhold</h1>
-    <p class="tag">Hold a key, talk, let go. Your words land wherever your cursor is. Free, open source, and everything runs on your Mac.</p>
+    <p class="tag">Hold a key, talk, let go. Your words land wherever your cursor is. Record a call and get the notes. Free, open source, and everything runs on your Mac.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/sturzael/speakhold/releases/latest">Download for Mac</a>
       <a class="btn ghost" href="https://github.com/sturzael/speakhold">View on GitHub</a>
@@ -65,20 +67,28 @@
 
   <pre><code>brew install --cask sturzael/tap/speakhold</code></pre>
 
+  <p class="note"><b>0.2 is on <code>main</code> now, release this week:</b> polish on-device with Apple Intelligence, Undo on the bar, hands-free lock, text replacements, a Dock icon, scripting, and meeting recording with notes. Build it with <code>./build.sh</code> today, or wait for the download.</p>
+
   <h2>Why people switch from Willow, Wispr Flow and Superwhisper</h2>
   <div class="grid">
     <div class="card"><h3>Words as you speak</h3><p>A small tab docked to the screen edge opens into a bar that shows the transcript live while you hold the key. Let go and it lands at the cursor.</p></div>
     <div class="card"><h3>100% on-device</h3><p>Speech-to-text runs with WhisperKit on the Apple Neural Engine. Works offline. Audio never leaves the machine.</p></div>
     <div class="card"><h3>Any hotkey chord</h3><p>Left and right modifiers are different keys. Default is left ⌃ + left ⌥, which collides with nothing. Hold to talk or press to toggle.</p></div>
     <div class="card"><h3>Pastes anywhere</h3><p>Slack, Gmail, Xcode, Terminal, Notes, the browser. Wherever the cursor is. Your clipboard is restored afterwards.</p></div>
-    <div class="card"><h3>Native and tiny</h3><p>One Swift binary, about 2 MB. No Electron, no Tauri, no background helpers. Menu-bar only.</p></div>
-    <div class="card"><h3>Optional AI polish</h3><p>Add a Claude API key and Speakhold removes fillers, fixes punctuation and spells names from your personal dictionary. Off by default.</p></div>
+    <div class="card"><h3>Native and tiny</h3><p>One Swift binary, a couple of megabytes. No Electron, no Tauri, no background helpers. Lives in the menu bar; the Dock icon is optional.</p></div>
+    <div class="card"><h3>Polish on your Mac</h3><p>On macOS 26, Apple Intelligence removes fillers, fixes punctuation and spells names from your dictionary, on-device, no key. Prefer Claude? Add your own key. Spoken commands and text replacements always work.</p></div>
+    <div class="card"><h3>Undo, lock, retry</h3><p>Undo sits on the bar for three seconds after a paste. Tap Space while holding to go hands-free. Try again re-runs a failed recording.</p></div>
+    <div class="card"><h3>Takes the minutes</h3><p>Record both sides of a Zoom, Meet or Teams call, no bot and no virtual driver. Transcript with speakers, your notes expanded, decisions and action items, one markdown file. Nothing uploaded.</p></div>
+    <div class="card"><h3>Scriptable</h3><p><code>speakhold://toggle</code> or <code>Speakhold --toggle</code> drives the running app from SketchyBar, Raycast or a Shortcut.</p></div>
     <div class="card"><h3>Open source</h3><p>MIT licensed. Read every line that touches your microphone. Issues and pull requests welcome.</p></div>
   </div>
 
   <h2>The bar</h2>
   <p>Idle, it is a lozenge on the right edge of the screen. Hold the chord and it grows into a bar with a live waveform and the words so far; the newest words stay in view. Dots while it finishes, amber while Claude polishes, a tick when it has pasted. Position and the idle tab are settings.</p>
   <img class="states" src="states.png" alt="The Speakhold bar in each state: idle tab, listening with live words, transcribing, polishing, done, error">
+
+  <h2>Meetings</h2>
+  <p>Choose <em>Record meeting</em>, or let Speakhold offer when it notices an app on a call. Your microphone and what the Mac is playing are recorded as two streams, so you and the other side are labelled without a bot joining the meeting. Type your own notes while it runs; tap the chord once to mark a moment; ask for the last two minutes if you drifted. Stop, and it transcribes on the Neural Engine, tells the far-side voices apart, names the meeting from your calendar, and writes Summary, Decisions, Action items and Open questions into one markdown file, with the full transcript underneath. The audio is deleted. Notes use Apple Intelligence on-device, or Claude with your key for long meetings.</p>
 
   <h2>Compared</h2>
   <table>
@@ -87,12 +97,14 @@
     <tr><td>Audio stays on device</td><td class="yes">Yes</td><td class="no">Cloud by default</td><td class="no">Cloud</td><td class="yes">Yes</td></tr>
     <tr><td>Native Swift</td><td class="yes">Yes</td><td>—</td><td>—</td><td class="yes">Yes</td></tr>
     <tr><td>Left/right-specific chords</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td>Partial</td></tr>
+    <tr><td>Polish without an API key</td><td class="yes">Yes, on-device</td><td class="no">Cloud</td><td class="no">Cloud</td><td class="yes">Yes</td></tr>
+    <tr><td>Records calls, no bot, no virtual driver</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td>Meeting mode</td></tr>
     <tr><td>Open source</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
   </table>
   <p class="small">Prices and features as of October 2026. Corrections welcome via pull request.</p>
 
   <h2>How it works</h2>
-  <p>Speakhold captures your microphone only while the chord is held, converts the audio to 16 kHz mono, runs it through Whisper Large v3 Turbo in-process, and types the result into the frontmost app with a synthetic ⌘V. The model (about 630 MB) downloads once on first launch. The only network request the app can make is the optional Claude cleanup, and only with a key you provide.</p>
+  <p>Speakhold captures your microphone only while the chord is held, converts the audio to 16 kHz mono, runs it through Whisper Large v3 Turbo in-process, and types the result into the frontmost app with a synthetic ⌘V. The model (about 630 MB) downloads once on first launch. Polish runs on-device through Apple Intelligence. The only network request the app can make is the Claude engine, and only if you choose it and provide a key. Meetings add a Core Audio process tap for what the Mac is playing, behind macOS's "System Audio Recording Only" permission; the audio is transcribed locally and deleted.</p>
 
   <footer>Built on <a href="https://github.com/argmaxinc/WhisperKit">WhisperKit</a>. Made in Wellington, New Zealand by <a href="https://wildinteractive.co.nz">Wild Interactive</a>.</footer>
 </main>
