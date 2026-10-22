@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The last recording, kept so an error can offer "Try again".
     private var lastSamples: [Float] = []
     static let commandNote = Notification.Name("co.wildinteractive.speakhold.command")
+    private var meeting: Any?   // MeetingSession (macOS 14.2+)
+    private var meetingTimer: Timer?
+    private var meetingItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyDockPolicy()
@@ -71,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "cancel": cancelRecording()
         case "settings": openSettings()
         case "history": openHistory()
+        case "meeting": toggleMeeting()
         default: NSLog("Speakhold: unknown command %@", cmd)
         }
     }
@@ -106,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(withTitle: isRecording ? "Stop dictation" : "Start dictation", action: #selector(toggleFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: meeting == nil ? "Record meeting" : "Stop meeting recording", action: #selector(toggleMeeting), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "")
         return menu
@@ -150,6 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setIcon(recording: false)
         let menu = NSMenu()
         menu.addItem(withTitle: "Start dictation", action: #selector(toggleFromMenu), keyEquivalent: "")
+        meetingItem = menu.addItem(withTitle: "Record meeting", action: #selector(toggleMeeting), keyEquivalent: "")
+        menu.addItem(withTitle: "Meeting notes folder", action: #selector(openMeetingsFolder), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "h")
@@ -167,6 +174,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleFromMenu() { isRecording ? finishRecording() : beginRecording() }
+
+    // MARK: meetings
+
+    @objc private func openMeetingsFolder() {
+        if #available(macOS 14.2, *) { NSWorkspace.shared.open(MeetingSession.folder) }
+    }
+
+    /// Menu / Dock / `--meeting`: start recording both sides of the call, or stop and write the notes.
+    @objc private func toggleMeeting() {
+        guard #available(macOS 14.2, *) else { overlay.show(.error("Meeting recording needs macOS 14.2 or newer.")); hideSoon(3); return }
+        if let session = meeting as? MeetingSession { stopMeeting(session) } else { startMeeting() }
+    }
+
+    @available(macOS 14.2, *)
+    private func startMeeting() {
+        guard !busy else { return }
+        Task { @MainActor in
+            guard await AudioRecorder.requestPermission() else {
+                overlay.show(.error("Microphone access is off. Grant it in System Settings → Privacy → Microphone.")); hideSoon(3); return
+            }
+            let session = MeetingSession()
+            do { try session.start() } catch {
+                overlay.show(.error("Could not record the call: \(error.localizedDescription)")); hideSoon(4); return
+            }
+            meeting = session
+            meetingItem?.title = "Stop meeting recording"
+            overlay.meetingLabel = "Recording 0:00"
+            overlay.show(.meeting("Recording 0:00"))
+            if Settings.shared.playSounds { NSSound(named: "Tink")?.play() }
+            meetingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                guard let self, let s = self.meeting as? MeetingSession else { return }
+                self.overlay.meetingLabel = "Recording " + s.elapsedLabel
+            }
+        }
+    }
+
+    @available(macOS 14.2, *)
+    private func stopMeeting(_ session: MeetingSession) {
+        meetingTimer?.invalidate(); meetingTimer = nil
+        meeting = nil
+        meetingItem?.title = "Record meeting"
+        overlay.meetingLabel = nil
+        if Settings.shared.playSounds { NSSound(named: "Pop")?.play() }
+        busy = true
+        overlay.show(.transcribing)
+        overlay.model.liveText = "Transcribing the meeting…"
+        let s = Settings.shared
+        Task { @MainActor in
+            defer { busy = false; overlay.model.liveText = "" }
+            do {
+                let url = try await session.finish(transcriber: transcriber, settings: s) { [weak self] step in
+                    DispatchQueue.main.async { self?.overlay.model.liveText = step }
+                }
+                History.shared.add("Meeting notes: \(url.lastPathComponent)", app: "Speakhold")
+                overlay.model.onUndo = nil
+                overlay.show(.done("Notes saved: \(url.lastPathComponent)"))
+                hideSoon(4)
+                NSWorkspace.shared.open(url)
+            } catch {
+                overlay.show(.error("Meeting notes failed: \(error.localizedDescription)")); hideSoon(5)
+            }
+        }
+    }
 
     @objc private func openSettings() {
         if settingsWindow == nil {

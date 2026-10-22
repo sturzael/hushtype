@@ -92,7 +92,7 @@ let args = CommandLine.arguments
 
 // `Speakhold --toggle | --start | --stop | --cancel | --settings | --history` controls the running copy
 // (same as `open speakhold://toggle`), for SketchyBar, Raycast, Shortcuts and scripts.
-if let cmd = ["--toggle", "--start", "--stop", "--cancel", "--settings", "--history"].first(where: { args.contains($0) }) {
+if let cmd = ["--toggle", "--start", "--stop", "--cancel", "--settings", "--history", "--meeting"].first(where: { args.contains($0) }) {
     DistributedNotificationCenter.default().postNotificationName(
         Notification.Name("co.wildinteractive.speakhold.command"), object: String(cmd.dropFirst(2)), userInfo: nil, deliverImmediately: true)
     exit(0)
@@ -159,6 +159,28 @@ if let i = args.firstIndex(of: "--record-meeting"), i + 2 < args.count {
         try? MeetingCapture.writeWAV(cap.system, to: dir + "/system.wav")
         try? MeetingCapture.writeWAV(cap.mic, to: dir + "/mic.wav")
         note("wrote system.wav + mic.wav")
+        sem.signal()
+    }
+    sem.wait()
+    exit(0)
+}
+
+// `Speakhold --meeting-from-files me.wav them.wav` runs the meeting pipeline (segments → merge → notes → markdown)
+// on two recordings, for testing without a call.
+if let i = args.firstIndex(of: "--meeting-from-files"), i + 2 < args.count {
+    guard #available(macOS 14.2, *) else { exit(1) }
+    let s = Settings.shared
+    let t = Transcriber()
+    let sem = DispatchSemaphore(value: 0)
+    Task {
+        await t.prepare(model: s.model.rawValue)
+        let session = MeetingSession(title: "Test meeting")
+        session.capture.load(micPath: args[i + 1], systemPath: args[i + 2])
+        do {
+            let url = try await session.finish(transcriber: t, settings: s) { print("…", $0) }
+            print("WROTE", url.path)
+            print(try String(contentsOf: url, encoding: .utf8))
+        } catch { print("ERROR", error.localizedDescription) }
         sem.signal()
     }
     sem.wait()

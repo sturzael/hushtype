@@ -193,43 +193,56 @@ struct AppleCleanup {
 }
 #endif
 
-/// Claude polish: raw HTTP to the Messages API with the user's own key; there is no official Swift SDK.
+/// Raw HTTP to the Messages API with the user's own key; there is no official Swift SDK.
+struct ClaudeClient {
+    let apiKey: String
+    let model: String
+
+    func complete(system: String, user: String, maxTokens: Int = 4096, effort: String = "low", timeout: TimeInterval = 20) async -> String? {
+        guard !apiKey.isEmpty, !user.isEmpty else { return nil }
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": maxTokens,
+            "system": system,
+            "output_config": ["effort": effort],
+            "messages": [["role": "user", "content": user]]
+        ]
+        var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+        req.httpMethod = "POST"
+        req.timeoutInterval = timeout
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                NSLog("Speakhold Claude HTTP error: %@", String(data: data, encoding: .utf8) ?? "")
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            if let stop = json["stop_reason"] as? String, stop == "refusal" { return nil }
+            guard let content = json["content"] as? [[String: Any]] else { return nil }
+            let text = content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined()
+            let out = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return out.isEmpty ? nil : out
+        } catch {
+            NSLog("Speakhold Claude request failed: %@", error.localizedDescription)
+            return nil
+        }
+    }
+}
+
+/// Claude polish.
 struct Cleanup {
     let apiKey: String
     let model: String
 
     func clean(_ raw: String, dictionary: [String], style: String, appName: String?) async -> String {
         guard !apiKey.isEmpty, !raw.isEmpty else { return raw }
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": 4096,
-            "system": PolishBrief.instructions(dictionary: dictionary, style: style, appName: appName),
-            "output_config": ["effort": "low"],
-            "messages": [["role": "user", "content": raw]]
-        ]
-        var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 20
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                NSLog("Speakhold cleanup HTTP error: %@", String(data: data, encoding: .utf8) ?? "")
-                return raw
-            }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return raw }
-            if let stop = json["stop_reason"] as? String, stop == "refusal" { return raw }
-            guard let content = json["content"] as? [[String: Any]] else { return raw }
-            let text = content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined()
-            let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return cleaned.isEmpty || !PolishBrief.plausible(cleaned, for: raw) ? raw : cleaned
-        } catch {
-            NSLog("Speakhold cleanup failed: %@", error.localizedDescription)
-            return raw
-        }
+        let system = PolishBrief.instructions(dictionary: dictionary, style: style, appName: appName)
+        guard let cleaned = await ClaudeClient(apiKey: apiKey, model: model).complete(system: system, user: raw),
+              PolishBrief.plausible(cleaned, for: raw) else { return raw }
+        return cleaned
     }
 }

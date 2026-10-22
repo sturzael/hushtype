@@ -117,6 +117,31 @@ final class MeetingCapture {
         return Array(UnsafeBufferPointer(start: out.floatChannelData![0], count: Int(out.frameLength)))
     }
 
+    /// Test hook: stand in for a recording with two files on disk (any format AVFoundation reads).
+    func load(micPath: String, systemPath: String) {
+        mic = MeetingCapture.samples(fromFile: micPath)
+        system = MeetingCapture.samples(fromFile: systemPath)
+    }
+
+    static func samples(fromFile path: String) -> [Float] {
+        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)) else { return [] }
+        let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
+        guard let inBuf = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+              (try? file.read(into: inBuf)) != nil else { return [] }
+        if file.processingFormat.sampleRate == 16_000, file.processingFormat.channelCount == 1 {
+            return Array(UnsafeBufferPointer(start: inBuf.floatChannelData![0], count: Int(inBuf.frameLength)))
+        }
+        guard let conv = AVAudioConverter(from: file.processingFormat, to: target),
+              let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: AVAudioFrameCount(Double(inBuf.frameLength) * 16_000 / file.processingFormat.sampleRate) + 16) else { return [] }
+        var consumed = false
+        var err: NSError?
+        conv.convert(to: out, error: &err) { _, status in
+            if consumed { status.pointee = .noDataNow; return nil }
+            consumed = true; status.pointee = .haveData; return inBuf
+        }
+        return Array(UnsafeBufferPointer(start: out.floatChannelData![0], count: Int(out.frameLength)))
+    }
+
     static func writeWAV(_ samples: [Float], to path: String) throws {
         let fmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
         let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(max(1, samples.count)))!

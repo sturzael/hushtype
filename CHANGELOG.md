@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Record meeting** (menu bar, Dock menu, `Speakhold --meeting`): records both sides of a call on this Mac, the microphone and whatever the Mac is playing (Core Audio process tap, macOS 14.2+, no BlackHole), shows a red dot with the elapsed time in the pill, and on stop transcribes both streams on the Neural Engine, merges them by time as you / Them, writes notes (Claude if a key is set, otherwise Apple Intelligence) and saves one markdown file to `~/Documents/Speakhold Meetings/`, then opens it. Audio is discarded. First use asks for "System Audio Recording Only".
 - **Polish on this Mac with Apple Intelligence** (macOS 26, Apple silicon): the default polish engine is now Apple's on-device model, so filler removal and punctuation need no API key and nothing leaves the machine. Claude stays as the opt-in engine under Settings → Cleanup → "Polish with". A length guard keeps the raw transcript if a model answers instead of editing.
 - Spoken commands ("new paragraph", "new line", "full stop", "comma", "question mark", "exclamation mark") are applied deterministically before any model, so they work with polish off too.
 - **Undo** on the pill for three seconds after a paste (sends ⌘Z to the app you dictated into). **Try again** on the error pill re-runs the last recording.

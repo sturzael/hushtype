@@ -4,7 +4,7 @@ import SwiftUI
 /// Floating bar at the screen edge, modelled on Willow's: a tiny tab while idle, a dark pill that streams the
 /// words as you speak while the hotkey is held. Non-activating so focus stays in the target app.
 final class OverlayModel: ObservableObject {
-    enum Phase: Equatable { case hidden, idle, listening, transcribing, cleaning, done(String), error(String) }
+    enum Phase: Equatable { case hidden, idle, listening, transcribing, cleaning, done(String), error(String), meeting(String) }
     /// Speech model loaded.
     @Published var ready = false
     @Published var phase: Phase = .hidden
@@ -62,7 +62,7 @@ struct OverlayView: View {
     }
 
     private var isLit: Bool {
-        switch model.phase { case .listening, .transcribing, .cleaning, .done, .error: return true; default: return false }
+        switch model.phase { case .listening, .transcribing, .cleaning, .done, .error, .meeting: return true; default: return false }
     }
     private var docked: Bool { position == .rightEdge }
 
@@ -85,6 +85,7 @@ struct OverlayView: View {
         switch model.phase {
         case .hidden: return "hidden"; case .idle: return "idle"; case .listening: return "listening"
         case .transcribing: return "transcribing"; case .cleaning: return "cleaning"; case .done: return "done"; case .error: return "error"
+        case .meeting: return "meeting"
         }
     }
 
@@ -143,6 +144,9 @@ struct OverlayView: View {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Ink.red)
                 Text(msg).font(.system(size: 13)).lineLimit(2).foregroundStyle(Ink.text)
                 if model.canRetry { chip("Try again") { model.onRetry?() } }
+            case .meeting(let label):
+                RecordingDot()
+                Text(label).font(.system(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(Ink.text)
             case .hidden:
                 EmptyView()
             }
@@ -197,6 +201,17 @@ struct Waveform: View {
             }
         }
         .animation(.linear(duration: 0.05), value: levels)
+    }
+}
+
+/// The meeting recorder's red dot, breathing slowly.
+struct RecordingDot: View {
+    @State private var on = false
+    var body: some View {
+        Circle().fill(Ink.red).frame(width: 8, height: 8)
+            .opacity(on ? 1 : 0.35)
+            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: on)
+            .onAppear { on = true }
     }
 }
 
@@ -299,9 +314,19 @@ final class OverlayPanel: NSPanel {
         if !isVisible { orderFrontRegardless() }
     }
 
+    /// While a meeting is being recorded the resting state is the red dot, not the idle tab.
+    var meetingLabel: String? {
+        didSet {
+            guard let meetingLabel else { return }
+            if case .meeting = model.phase { model.phase = .meeting(meetingLabel) }
+        }
+    }
+
     /// Returns to the idle state: a small always-on tab if enabled, otherwise fades out.
     func hide() {
-        if Settings.shared.showIdlePill {
+        if let meetingLabel {
+            show(.meeting(meetingLabel))
+        } else if Settings.shared.showIdlePill {
             show(.idle)
         } else {
             withAnimation(.easeOut(duration: 0.2)) { model.phase = .hidden; model.liveText = "" }
