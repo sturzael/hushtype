@@ -92,7 +92,7 @@ let args = CommandLine.arguments
 
 // `Speakhold --toggle | --start | --stop | --cancel | --settings | --history` controls the running copy
 // (same as `open speakhold://toggle`), for SketchyBar, Raycast, Shortcuts and scripts.
-if let cmd = ["--toggle", "--start", "--stop", "--cancel", "--settings", "--history", "--meeting"].first(where: { args.contains($0) }) {
+if let cmd = ["--toggle", "--start", "--stop", "--cancel", "--settings", "--history", "--meeting", "--mark", "--catchup"].first(where: { args.contains($0) }) {
     DistributedNotificationCenter.default().postNotificationName(
         Notification.Name("co.wildinteractive.speakhold.command"), object: String(cmd.dropFirst(2)), userInfo: nil, deliverImmediately: true)
     exit(0)
@@ -176,14 +176,25 @@ if let i = args.firstIndex(of: "--meeting-from-files"), i + 2 < args.count {
         await t.prepare(model: s.model.rawValue)
         let session = MeetingSession(title: "Test meeting")
         session.capture.load(micPath: args[i + 1], systemPath: args[i + 2])
+        if args.contains("--marks") { session.marks = [5, 12] }
+        if let n = args.firstIndex(of: "--notes"), n + 1 < args.count { session.userNotes = args[n + 1] }
+        let engine: MeetingTranscriber = args.contains("--parakeet") ? ParakeetMeetingTranscriber() : WhisperMeetingTranscriber(transcriber: t)
+        let dia: MeetingDiarizer? = args.contains("--diarise") ? FluidMeetingDiarizer() : nil
         do {
-            let url = try await session.finish(transcriber: t, settings: s) { print("…", $0) }
+            let url = try await session.finish(transcriber: engine, diarizer: dia, settings: s) { print("…", $0) }
             print("WROTE", url.path)
             print(try String(contentsOf: url, encoding: .utf8))
         } catch { print("ERROR", error.localizedDescription) }
         sem.signal()
     }
     sem.wait()
+    exit(0)
+}
+
+// `Speakhold --calls` lists apps currently using the microphone (the auto-offer signal).
+if args.contains("--calls") {
+    if #available(macOS 14.2, *) { for c in CallDetector.activeCalls() { print(c.pid, c.name) } }
+    print("done")
     exit(0)
 }
 

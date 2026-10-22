@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refreshPermissions() }
         overlay.model.onRetry = { [weak self] in self?.retryLast() }
+        startCallWatch()
         DistributedNotificationCenter.default().addObserver(forName: Self.commandNote, object: nil, queue: .main) { [weak self] n in
             self?.handleCommand(n.object as? String ?? "")
         }
@@ -75,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "settings": openSettings()
         case "history": openHistory()
         case "meeting": toggleMeeting()
+        case "mark": markMoment()
+        case "catchup": catchMeUp()
         default: NSLog("Speakhold: unknown command %@", cmd)
         }
     }
@@ -111,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: isRecording ? "Stop dictation" : "Start dictation", action: #selector(toggleFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: meeting == nil ? "Record meeting" : "Stop meeting recording", action: #selector(toggleMeeting), keyEquivalent: "")
+        if meeting != nil { menu.addItem(withTitle: "Mark this moment", action: #selector(markMoment), keyEquivalent: "") }
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "")
         return menu
@@ -156,6 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Start dictation", action: #selector(toggleFromMenu), keyEquivalent: "")
         meetingItem = menu.addItem(withTitle: "Record meeting", action: #selector(toggleMeeting), keyEquivalent: "")
+        menu.addItem(withTitle: "Meeting window…", action: #selector(openMeetingWindow), keyEquivalent: "")
+        menu.addItem(withTitle: "Mark this moment", action: #selector(markMoment), keyEquivalent: "")
         menu.addItem(withTitle: "Meeting notes folder", action: #selector(openMeetingsFolder), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -177,8 +183,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: meetings
 
+    private let meetingState = MeetingState()
+    private var meetingWindow: NSWindow?
+    private var parakeet: Any?        // ParakeetMeetingTranscriber
+    private var diarizer: Any?        // FluidMeetingDiarizer
+    private var callTimer: Timer?
+    private var offeredPIDs: Set<pid_t> = []
+    private var offerShownAt: Date?
+
     @objc private func openMeetingsFolder() {
         if #available(macOS 14.2, *) { NSWorkspace.shared.open(MeetingSession.folder) }
+    }
+
+    @objc private func openMeetingWindow() {
+        if meetingWindow == nil {
+            meetingWindow = AppDelegate.inkWindow(title: "Meeting", root: MeetingView(state: meetingState), resizable: true)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        meetingWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// Menu / Dock / `--meeting`: start recording both sides of the call, or stop and write the notes.
@@ -187,9 +209,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let session = meeting as? MeetingSession { stopMeeting(session) } else { startMeeting() }
     }
 
+    @objc private func markMoment() {
+        guard #available(macOS 14.2, *), let session = meeting as? MeetingSession else { return }
+        session.mark()
+        meetingState.marks = session.marks
+        overlay.show(.done("Marked " + session.elapsedLabel))
+        hideSoon(1.2)
+        if Settings.shared.playSounds { NSSound(named: "Tink")?.play() }
+    }
+
+    private func catchMeUp() {
+        guard #available(macOS 14.2, *), let session = meeting as? MeetingSession, !meetingState.catchingUp else { return }
+        meetingState.catchingUp = true
+        meetingState.catchUp = ""
+        openMeetingWindow()
+        Task { @MainActor in
+            let text = await session.catchUp(transcriber: transcriber, settings: Settings.shared)
+            meetingState.catchUp = text
+            meetingState.catchingUp = false
+        }
+    }
+
     @available(macOS 14.2, *)
     private func startMeeting() {
         guard !busy else { return }
+        overlay.model.onAccept = nil
         Task { @MainActor in
             guard await AudioRecorder.requestPermission() else {
                 overlay.show(.error("Microphone access is off. Grant it in System Settings → Privacy → Microphone.")); hideSoon(3); return
@@ -200,12 +244,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             meeting = session
             meetingItem?.title = "Stop meeting recording"
+            meetingState.active = true
+            meetingState.title = session.title
+            meetingState.attendees = []
+            meetingState.notes = ""
+            meetingState.marks = []
+            meetingState.catchUp = ""
+            meetingState.status = ""
+            meetingState.elapsedLabel = "0:00"
+            meetingState.onStop = { [weak self] in self?.toggleMeeting() }
+            meetingState.onMark = { [weak self] in self?.markMoment() }
+            meetingState.onCatchUp = { [weak self] in self?.catchMeUp() }
             overlay.meetingLabel = "Recording 0:00"
             overlay.show(.meeting("Recording 0:00"))
             if Settings.shared.playSounds { NSSound(named: "Tink")?.play() }
             meetingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 guard let self, let s = self.meeting as? MeetingSession else { return }
                 self.overlay.meetingLabel = "Recording " + s.elapsedLabel
+                self.meetingState.elapsedLabel = s.elapsedLabel
+            }
+            openMeetingWindow()
+            // Warm the heavy models while the call runs so the end is quick.
+            if Settings.shared.meetingEngine == .parakeet {
+                let p = (parakeet as? ParakeetMeetingTranscriber) ?? ParakeetMeetingTranscriber()
+                parakeet = p
+                Task { try? await p.prepare { [weak self] st in DispatchQueue.main.async { self?.meetingState.status = st == "Ready" ? "" : st } } }
+            }
+            if Settings.shared.meetingDiarise {
+                let d = (diarizer as? FluidMeetingDiarizer) ?? FluidMeetingDiarizer()
+                diarizer = d
+                Task { try? await d.prepare() }
+            }
+            // Calendar: title + invitees; the user can overtype the title.
+            await session.adoptCalendar()
+            if (meeting as? MeetingSession) === session {
+                if meetingState.title.hasPrefix("Meeting ") { meetingState.title = session.title }
+                meetingState.attendees = session.attendees
             }
         }
     }
@@ -215,26 +289,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         meetingTimer?.invalidate(); meetingTimer = nil
         meeting = nil
         meetingItem?.title = "Record meeting"
+        meetingState.active = false
         overlay.meetingLabel = nil
         if Settings.shared.playSounds { NSSound(named: "Pop")?.play() }
         busy = true
         overlay.show(.transcribing)
         overlay.model.liveText = "Transcribing the meeting…"
+        session.title = meetingState.title.trimmingCharacters(in: .whitespaces).isEmpty ? session.title : meetingState.title
+        session.userNotes = meetingState.notes
         let s = Settings.shared
+        let engine: MeetingTranscriber = (s.meetingEngine == .parakeet ? (parakeet as? ParakeetMeetingTranscriber) : nil) ?? WhisperMeetingTranscriber(transcriber: transcriber)
+        let dia: MeetingDiarizer? = s.meetingDiarise ? ((diarizer as? FluidMeetingDiarizer) ?? FluidMeetingDiarizer()) : nil
         Task { @MainActor in
-            defer { busy = false; overlay.model.liveText = "" }
+            defer { busy = false; overlay.model.liveText = ""; meetingState.status = "" }
             do {
-                let url = try await session.finish(transcriber: transcriber, settings: s) { [weak self] step in
-                    DispatchQueue.main.async { self?.overlay.model.liveText = step }
+                let url = try await session.finish(transcriber: engine, diarizer: dia, settings: s) { [weak self] step in
+                    DispatchQueue.main.async { self?.overlay.model.liveText = step; self?.meetingState.status = step }
                 }
                 History.shared.add("Meeting notes: \(url.lastPathComponent)", app: "Speakhold")
                 overlay.model.onUndo = nil
                 overlay.show(.done("Notes saved: \(url.lastPathComponent)"))
                 hideSoon(4)
+                meetingWindow?.orderOut(nil)
                 NSWorkspace.shared.open(url)
             } catch {
                 overlay.show(.error("Meeting notes failed: \(error.localizedDescription)")); hideSoon(5)
             }
+        }
+    }
+
+    /// Every few seconds: is some app using the microphone? Offer to record it, once per app, until it stops.
+    private func startCallWatch() {
+        guard #available(macOS 14.2, *) else { return }
+        callTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self, Settings.shared.meetingAutoOffer, self.meeting == nil, !self.isRecording, !self.busy else { return }
+            let calls = CallDetector.activeCalls()
+            let live = Set(calls.map(\.pid))
+            self.offeredPIDs.formIntersection(live)   // an app that stopped can be offered again next time
+            if case .offer = self.overlay.model.phase, let at = self.offerShownAt, Date().timeIntervalSince(at) > 25 {
+                self.overlay.model.onAccept = nil; self.overlay.hide(); self.offerShownAt = nil
+            }
+            guard let call = calls.first(where: { !self.offeredPIDs.contains($0.pid) }) else { return }
+            self.offeredPIDs.insert(call.pid)
+            self.overlay.model.onAccept = { [weak self] in
+                guard let self else { return }
+                self.overlay.model.onAccept = nil
+                if #available(macOS 14.2, *) { self.startMeeting() }
+            }
+            self.offerShownAt = Date()
+            self.overlay.show(.offer(call.name))
         }
     }
 
@@ -305,8 +408,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeys.onRelease = { [weak self] in
             guard let self, Settings.shared.mode == .hold, self.isRecording, !self.locked else { return }
-            // A very quick tap is almost always accidental; drop it.
-            if let t = self.pressedAt, Date().timeIntervalSince(t) < 0.25 { self.cancelRecording(); return }
+            // A very quick tap is almost always accidental; drop it. During a meeting it marks the moment.
+            if let t = self.pressedAt, Date().timeIntervalSince(t) < 0.25 {
+                self.cancelRecording()
+                if self.meeting != nil { self.markMoment() }
+                return
+            }
             self.finishRecording()
         }
         hotkeys.onEscape = { [weak self] in

@@ -251,13 +251,13 @@ struct LevelMeter: View {
 // MARK: - Settings window
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, cleanup, permissions
+    case general, cleanup, meetings, permissions
     var id: String { rawValue }
     var title: String {
-        switch self { case .general: return "General"; case .cleanup: return "Cleanup"; case .permissions: return "Permissions" }
+        switch self { case .general: return "General"; case .cleanup: return "Cleanup"; case .meetings: return "Meetings"; case .permissions: return "Permissions" }
     }
     var icon: String {
-        switch self { case .general: return "keyboard"; case .cleanup: return "sparkles"; case .permissions: return "lock.shield" }
+        switch self { case .general: return "keyboard"; case .cleanup: return "sparkles"; case .meetings: return "record.circle"; case .permissions: return "lock.shield" }
     }
 }
 
@@ -288,6 +288,7 @@ struct SettingsView: View {
             switch tab {
             case .general: general
             case .cleanup: cleanup
+            case .meetings: meetings
             case .permissions: permissions
             }
         }
@@ -565,6 +566,58 @@ struct SettingsView: View {
         "Removes fillers, fixes punctuation, applies the dictionary. Spoken commands (new paragraph, full stop, comma, question mark) always work, even with polish off. If a model pass fails or wanders, the raw transcript is pasted instead."
     }
 
+    // MARK: meetings
+
+    private var meetings: some View {
+        Group {
+            InkCard(title: "Recording", note: "Both sides of a call are recorded on this Mac: your microphone, and what the Mac is playing. No virtual audio driver, no bot in the meeting. Audio is transcribed here and discarded. The first recording asks for “System Audio Recording Only”.") {
+                InkRow(label: "Offer to record when an app starts a call", hint: "Watches for any app using the microphone (Zoom, Meet, Teams, FaceTime). The pill asks; nothing records until you tap.", divider: false) {
+                    Toggle("", isOn: $settings.meetingAutoOffer).toggleStyle(InkToggleStyle()).labelsHidden()
+                }
+                InkRow(label: "Title and invitees from Calendar", hint: "Read-only. Asks for calendar access once.") {
+                    Toggle("", isOn: $settings.meetingCalendar).toggleStyle(InkToggleStyle()).labelsHidden()
+                }
+            }
+            InkCard(title: "Transcript", note: "Whisper is already loaded for dictation. Parakeet transcribes an hour in well under a minute and downloads about 600 MB on first use; English only.") {
+                InkRow(label: "Transcribe meetings with", divider: false) {
+                    Picker("", selection: $settings.meetingEngine) {
+                        ForEach(MeetingEngine.allCases) { Text($0.label).tag($0) }
+                    }.labelsHidden().frame(width: 300)
+                }
+                InkRow(label: "Tell the other voices apart", hint: "Speaker 1, 2, 3 on the far side, on-device. Downloads the voice models on first use.") {
+                    Toggle("", isOn: $settings.meetingDiarise).toggleStyle(InkToggleStyle()).labelsHidden()
+                }
+            }
+            InkCard(title: "Notes", note: "Notes use Claude when a key is set under Cleanup (long meetings need its context), otherwise Apple Intelligence on the last part of the transcript.") {
+                InkRow(label: "Draft a follow-up email too", divider: false) {
+                    Toggle("", isOn: $settings.meetingFollowUp).toggleStyle(InkToggleStyle()).labelsHidden()
+                }
+                InkRow(label: "Save notes to", hint: settings.meetingsFolder.isEmpty ? "~/Documents/Speakhold Meetings" : settings.meetingsFolder) {
+                    HStack(spacing: 8) {
+                        Button("Choose…") {
+                            let p = NSOpenPanel(); p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
+                            p.prompt = "Use this folder"
+                            if p.runModal() == .OK, let url = p.url { settings.meetingsFolder = url.path }
+                        }.buttonStyle(InkButtonStyle())
+                        if !settings.meetingsFolder.isEmpty {
+                            Button("Default") { settings.meetingsFolder = "" }.buttonStyle(InkButtonStyle())
+                        }
+                    }
+                }
+            }
+            InkCard(title: "During a meeting") {
+                InkBlock(divider: false) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        privacyLine("Type your own notes in the meeting window; the transcript expands them afterwards.")
+                        privacyLine("Tap the dictation chord once (or “Mark this moment”) to flag a moment; the notes quote the transcript around it.")
+                        privacyLine("“Catch me up” shows the last two minutes as text.")
+                        privacyLine("Dictation works as normal while a meeting records.")
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: permissions
 
     private var permissions: some View {
@@ -592,7 +645,7 @@ struct SettingsView: View {
     private func privacyLine(_ s: String) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Ink.mint).padding(.top, 3)
-            Text(s).font(.system(size: 12.5)).foregroundStyle(Ink.text)
+            Text(s).font(.system(size: 12.5)).foregroundStyle(Ink.text).fixedSize(horizontal: false, vertical: true)
         }
     }
 

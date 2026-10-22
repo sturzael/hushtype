@@ -22,6 +22,7 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>Speakhold records your voice while you hold the hotkey so it can transcribe it.</string>
     <key>NSAudioCaptureUsageDescription</key><string>Speakhold records what the Mac is playing only while you record a meeting, so both sides of the call are in the transcript.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>Speakhold reads the current calendar event to title your meeting notes and list who was invited. Nothing is written to the calendar.</string>
     <key>NSAppleEventsUsageDescription</key><string>Speakhold pastes transcribed text into the app you are using.</string>
 </dict>
 </plist>

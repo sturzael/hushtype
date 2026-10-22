@@ -103,6 +103,12 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     }
 }
 
+enum MeetingEngine: String, CaseIterable, Identifiable {
+    case whisper, parakeet
+    var id: String { rawValue }
+    var label: String { self == .whisper ? "Whisper (same model as dictation)" : "Parakeet (faster, English, ~600 MB extra)" }
+}
+
 final class Settings: ObservableObject {
     static let shared = Settings()
     private let d = UserDefaults.standard
@@ -125,6 +131,14 @@ final class Settings: ObservableObject {
     @Published var showIdlePill: Bool { didSet { d.set(showIdlePill, forKey: "showIdlePill") } }
     @Published var livePreview: Bool { didSet { d.set(livePreview, forKey: "livePreview") } }
     @Published var pillPosition: PillPosition { didSet { d.set(pillPosition.rawValue, forKey: "pillPosition") } }
+    // Meetings
+    /// Folder for meeting notes; empty = ~/Documents/Speakhold Meetings.
+    @Published var meetingsFolder: String { didSet { d.set(meetingsFolder, forKey: "meetingsFolder") } }
+    @Published var meetingAutoOffer: Bool { didSet { d.set(meetingAutoOffer, forKey: "meetingAutoOffer") } }
+    @Published var meetingDiarise: Bool { didSet { d.set(meetingDiarise, forKey: "meetingDiarise") } }
+    @Published var meetingCalendar: Bool { didSet { d.set(meetingCalendar, forKey: "meetingCalendar") } }
+    @Published var meetingFollowUp: Bool { didSet { d.set(meetingFollowUp, forKey: "meetingFollowUp") } }
+    @Published var meetingEngine: MeetingEngine { didSet { d.set(meetingEngine.rawValue, forKey: "meetingEngine") } }
     /// Keep an icon in the Dock (click it to open Settings; right-click for the menu). Off = menu-bar only.
     @Published var showInDock: Bool { didSet { d.set(showInDock, forKey: "showInDock") } }
 
@@ -155,6 +169,12 @@ final class Settings: ObservableObject {
         livePreview = d.object(forKey: "livePreview") as? Bool ?? true
         pillPosition = PillPosition(rawValue: d.string(forKey: "pillPosition") ?? "") ?? .rightEdge
         showInDock = d.object(forKey: "showInDock") as? Bool ?? true
+        meetingsFolder = d.string(forKey: "meetingsFolder") ?? ""
+        meetingAutoOffer = d.object(forKey: "meetingAutoOffer") as? Bool ?? true
+        meetingDiarise = d.object(forKey: "meetingDiarise") as? Bool ?? true
+        meetingCalendar = d.object(forKey: "meetingCalendar") as? Bool ?? true
+        meetingFollowUp = d.object(forKey: "meetingFollowUp") as? Bool ?? false
+        meetingEngine = MeetingEngine(rawValue: d.string(forKey: "meetingEngine") ?? "") ?? .whisper
     }
 
     /// Picks up ANTHROPIC_API_KEY from the environment on first launch so there is nothing to paste.

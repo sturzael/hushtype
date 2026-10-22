@@ -4,7 +4,7 @@ import SwiftUI
 /// Floating bar at the screen edge, modelled on Willow's: a tiny tab while idle, a dark pill that streams the
 /// words as you speak while the hotkey is held. Non-activating so focus stays in the target app.
 final class OverlayModel: ObservableObject {
-    enum Phase: Equatable { case hidden, idle, listening, transcribing, cleaning, done(String), error(String), meeting(String) }
+    enum Phase: Equatable { case hidden, idle, listening, transcribing, cleaning, done(String), error(String), meeting(String), offer(String) }
     /// Speech model loaded.
     @Published var ready = false
     @Published var phase: Phase = .hidden
@@ -19,6 +19,7 @@ final class OverlayModel: ObservableObject {
     @Published var pillFrame: CGRect = .zero
     var onUndo: (() -> Void)?
     var onRetry: (() -> Void)?
+    var onAccept: (() -> Void)?
     var onHover: ((Bool) -> Void)?
 
     func push(level: Float) {
@@ -62,7 +63,7 @@ struct OverlayView: View {
     }
 
     private var isLit: Bool {
-        switch model.phase { case .listening, .transcribing, .cleaning, .done, .error, .meeting: return true; default: return false }
+        switch model.phase { case .listening, .transcribing, .cleaning, .done, .error, .meeting, .offer: return true; default: return false }
     }
     private var docked: Bool { position == .rightEdge }
 
@@ -85,7 +86,7 @@ struct OverlayView: View {
         switch model.phase {
         case .hidden: return "hidden"; case .idle: return "idle"; case .listening: return "listening"
         case .transcribing: return "transcribing"; case .cleaning: return "cleaning"; case .done: return "done"; case .error: return "error"
-        case .meeting: return "meeting"
+        case .meeting: return "meeting"; case .offer: return "offer"
         }
     }
 
@@ -147,6 +148,10 @@ struct OverlayView: View {
             case .meeting(let label):
                 RecordingDot()
                 Text(label).font(.system(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(Ink.text)
+            case .offer(let app):
+                RecordingDot()
+                Text("\(app) is on a call. Record it?").font(.system(size: 13)).foregroundStyle(Ink.text)
+                chip("Record") { model.onAccept?() }
             case .hidden:
                 EmptyView()
             }
@@ -284,6 +289,7 @@ final class OverlayPanel: NSPanel {
         switch model.phase {
         case .done: return model.onUndo != nil
         case .error: return model.canRetry
+        case .offer: return true
         default: return false
         }
     }
