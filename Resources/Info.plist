@@ -12,6 +12,13 @@
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key><string>co.wildinteractive.speakhold</string>
+            <key>CFBundleURLSchemes</key><array><string>speakhold</string></array>
+        </dict>
+    </array>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>Speakhold records your voice while you hold the hotkey so it can transcribe it.</string>
     <key>NSAppleEventsUsageDescription</key><string>Speakhold pastes transcribed text into the app you are using.</string>

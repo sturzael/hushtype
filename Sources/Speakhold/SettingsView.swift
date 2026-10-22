@@ -388,7 +388,7 @@ struct SettingsView: View {
                 }
             }
 
-            InkCard(title: "Hotkey", note: "Click Record, hold the keys you want (e.g. Control + Option) and let go. Left and right keys are told apart. Add an F-key by pressing it while the modifiers are held.") {
+            InkCard(title: "Hotkey", note: "Click Record, hold the keys you want (e.g. Control + Option) and let go. Left and right keys are told apart. Add an F-key by pressing it while the modifiers are held. While dictating, tap Space to lock hands-free: let go, keep talking, press the chord again to finish. Esc cancels.") {
                 InkRow(label: "Shortcut", divider: false) {
                     HStack(spacing: 10) {
                         HStack(spacing: 8) {
@@ -529,24 +529,40 @@ struct SettingsView: View {
 
     private var cleanup: some View {
         Group {
-            InkCard(title: "Polish with Claude", note: "Removes fillers and fixes punctuation. Only the transcript text is sent, never audio. Falls back to the raw transcript if the request fails.") {
-                InkRow(label: "Polish transcript with Claude", divider: false) {
-                    Toggle("", isOn: $settings.cleanupEnabled).toggleStyle(InkToggleStyle()).labelsHidden()
+            InkCard(title: "Polish", note: polishNote) {
+                InkRow(label: "Polish with", divider: false) {
+                    Picker("", selection: $settings.cleanupEngine) {
+                        ForEach(CleanupEngine.allCases) { Text($0.label).tag($0) }
+                    }.labelsHidden().frame(width: 270)
                 }
-                InkRow(label: "Model") {
-                    InkField(placeholder: "claude-haiku-5-5", text: $settings.cleanupModel, width: 220)
+                if settings.cleanupEngine == .apple {
+                    InkRow(label: "Apple Intelligence", hint: Polish.appleAvailable ? "Runs on this Mac. Nothing is sent anywhere." : "Needs macOS 26 on Apple silicon with Apple Intelligence turned on in System Settings.") {
+                        StatusChip(text: Polish.appleAvailable ? "Available" : "Not available", color: Polish.appleAvailable ? Ink.mint : Ink.amber)
+                    }
                 }
-                InkRow(label: "Anthropic API key", hint: "Or set ANTHROPIC_API_KEY before launch.") {
-                    InkField(placeholder: "sk-ant-…", text: $settings.anthropicKey, secure: true, width: 260)
+                if settings.cleanupEngine == .claude {
+                    InkRow(label: "Model") {
+                        InkField(placeholder: "claude-haiku-5-5", text: $settings.cleanupModel, width: 220)
+                    }
+                    InkRow(label: "Anthropic API key", hint: settings.anthropicKey.isEmpty ? "Nothing is polished until a key is set. Or set ANTHROPIC_API_KEY before launch." : "Only the transcript text is sent, never audio.") {
+                        InkField(placeholder: "sk-ant-…", text: $settings.anthropicKey, secure: true, width: 260)
+                    }
                 }
             }
-            InkCard(title: "Dictionary", note: "Names and terms to spell exactly. One per line. These also prime the on-device model.") {
-                InkBlock(divider: false) { InkEditor(text: $settings.dictionary, mono: true, minHeight: 120) }
+            InkCard(title: "Dictionary", note: "Names and terms to spell exactly. One per line. These prime the speech model and the polish pass.") {
+                InkBlock(divider: false) { InkEditor(text: $settings.dictionary, mono: true, minHeight: 100) }
             }
-            InkCard(title: "Style notes", note: "Optional. How you like things written: “keep it casual”, “never use semicolons”.") {
-                InkBlock(divider: false) { InkEditor(text: $settings.styleNotes, minHeight: 80) }
+            InkCard(title: "Replacements", note: "One per line, spoken -> written. Whole phrase, any case. Runs last, with or without polish.\nmy email -> you@example.com\nwild interactive -> Wild Interactive") {
+                InkBlock(divider: false) { InkEditor(text: $settings.replacements, mono: true, minHeight: 80) }
+            }
+            InkCard(title: "Style notes", note: "Optional. How you like things written: “keep it casual”, “never use semicolons”. Applies to either polish engine.") {
+                InkBlock(divider: false) { InkEditor(text: $settings.styleNotes, minHeight: 70) }
             }
         }
+    }
+
+    private var polishNote: String {
+        "Removes fillers, fixes punctuation, applies the dictionary. Spoken commands (new paragraph, full stop, comma, question mark) always work, even with polish off. If a model pass fails or wanders, the raw transcript is pasted instead."
     }
 
     // MARK: permissions
@@ -565,7 +581,7 @@ struct SettingsView: View {
                 InkBlock(divider: false) {
                     VStack(alignment: .leading, spacing: 8) {
                         privacyLine("Audio is transcribed on this Mac and never uploaded.")
-                        privacyLine("Only the transcript text goes to Claude, and only if polishing is on.")
+                        privacyLine("Polish runs on this Mac with Apple Intelligence. Only if you choose Claude does the transcript text leave, with your key.")
                         privacyLine("History lives in your user folder. Clear it any time from the menu.")
                     }
                 }

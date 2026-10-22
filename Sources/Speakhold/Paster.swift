@@ -27,6 +27,18 @@ enum Paster {
         }
     }
 
+    /// ⌘Z to the frontmost app: the standard undo of the paste we just sent.
+    static func undo() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let z = CGKeyCode(kVK_ANSI_Z)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: z, keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: z, keyDown: false)
+        down?.flags = .maskCommand
+        up?.flags = .maskCommand
+        down?.post(tap: .cghidEventTap)
+        up?.post(tap: .cghidEventTap)
+    }
+
     static var accessibilityTrusted: Bool { AXIsProcessTrusted() }
 
     static func promptAccessibility() {

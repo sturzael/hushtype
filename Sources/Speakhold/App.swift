@@ -29,6 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastLevelPush = Date.distantPast
     private var settingsObserver: Any?
     private var previewTask: Task<Void, Never>?
+    /// Hands-free: Space was tapped while the chord was held, so the release is ignored and the next press finishes.
+    private var locked = false
+    /// The last recording, kept so an error can offer "Try again".
+    private var lastSamples: [Float] = []
+    static let commandNote = Notification.Name("co.wildinteractive.speakhold.command")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyDockPolicy()
@@ -45,7 +50,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.applySettings()
         }
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refreshPermissions() }
+        overlay.model.onRetry = { [weak self] in self?.retryLast() }
+        DistributedNotificationCenter.default().addObserver(forName: Self.commandNote, object: nil, queue: .main) { [weak self] n in
+            self?.handleCommand(n.object as? String ?? "")
+        }
         if CommandLine.arguments.contains("--demo-overlay") { demoOverlay() }
+    }
+
+    // MARK: remote control (CLI flags, speakhold:// URLs)
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { handleCommand(url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))) }
+    }
+
+    private func handleCommand(_ cmd: String) {
+        switch cmd {
+        case "toggle": isRecording ? finishRecording() : beginRecording()
+        case "start": beginRecording()
+        case "stop", "finish": finishRecording()
+        case "cancel": cancelRecording()
+        case "settings": openSettings()
+        case "history": openHistory()
+        default: NSLog("Speakhold: unknown command %@", cmd)
+        }
     }
 
     /// Shows the pill through its states with a fake waveform, for screenshots and layout checks.
@@ -191,6 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.combo = Settings.shared.hotkey
         hotkeys.onPress = { [weak self] in
             guard let self else { return }
+            if self.locked { self.finishRecording(); return }   // hands-free: the next press finishes
             switch Settings.shared.mode {
             case .hold:
                 self.pressedAt = Date()
@@ -199,8 +227,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.isRecording ? self.finishRecording() : self.beginRecording()
             }
         }
+        hotkeys.onLock = { [weak self] in
+            guard let self, self.isRecording, Settings.shared.mode == .hold, !self.locked else { return false }
+            self.locked = true
+            self.overlay.model.locked = true
+            return true
+        }
         hotkeys.onRelease = { [weak self] in
-            guard let self, Settings.shared.mode == .hold, self.isRecording else { return }
+            guard let self, Settings.shared.mode == .hold, self.isRecording, !self.locked else { return }
             // A very quick tap is almost always accidental; drop it.
             if let t = self.pressedAt, Date().timeIntervalSince(t) < 0.25 { self.cancelRecording(); return }
             self.finishRecording()
@@ -306,6 +340,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             targetApp = NSWorkspace.shared.frontmostApplication?.localizedName
+            locked = false
+            overlay.model.locked = false
+            overlay.model.onUndo = nil
+            overlay.model.canRetry = false
             recorder.inputDeviceUID = Settings.shared.inputDeviceUID
             do {
                 try recorder.start()
@@ -358,6 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         previewTask?.cancel(); previewTask = nil
         _ = recorder.stop()
         isRecording = false
+        locked = false
         setIcon(recording: false)
         overlay.hide()
     }
@@ -367,12 +406,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         previewTask?.cancel(); previewTask = nil
         let samples = recorder.stop()
         isRecording = false
+        locked = false
         setIcon(recording: false)
         if Settings.shared.playSounds { NSSound(named: "Pop")?.play() }
 
         // Under half a second of audio is a mis-press.
         guard samples.count > 8_000 else { overlay.hide(); return }
+        lastSamples = samples
+        process(samples)
+    }
+
+    /// "Try again" on the error pill: run the same recording through the pipeline again.
+    private func retryLast() {
+        guard !busy, !isRecording, !lastSamples.isEmpty else { return }
+        process(lastSamples)
+    }
+
+    /// Transcribe → polish → paste. The pill shows each step; the result keeps an Undo for a few seconds.
+    private func process(_ samples: [Float]) {
         busy = true
+        overlay.model.canRetry = false
         overlay.show(.transcribing)
         let s = Settings.shared
         let app = targetApp
@@ -381,27 +434,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let raw = try await transcriber.transcribe(samples, language: s.language, promptTerms: s.dictionaryTerms)
                 guard !raw.isEmpty else {
-                    await MainActor.run { overlay.show(.error("Didn't catch anything.")); hideSoon(1.5) }
+                    await MainActor.run { overlay.model.canRetry = true; overlay.show(.error("Didn't catch anything.")); hideSoon(4) }
                     return
                 }
-                let text: String
-                if s.cleanupEnabled, !s.anthropicKey.isEmpty {
-                    await MainActor.run { overlay.show(.cleaning) }
-                    text = await Cleanup(apiKey: s.anthropicKey, model: s.cleanupModel)
-                        .clean(raw, dictionary: s.dictionaryTerms, style: s.styleNotes, appName: app)
-                } else {
-                    text = raw
-                }
+                if Polish.willUseModel(s) { await MainActor.run { overlay.show(.cleaning) } }
+                let text = await Polish.run(raw, settings: s, appName: app)
                 await MainActor.run {
                     Paster.paste(text)
                     History.shared.add(text, app: app)
+                    overlay.model.onUndo = { [weak self] in self?.undoLast() }
                     overlay.show(.done(text))
-                    hideSoon(0.7)
+                    hideSoon(3)
                 }
             } catch {
-                await MainActor.run { overlay.show(.error(error.localizedDescription)); hideSoon(3) }
+                await MainActor.run { overlay.model.canRetry = true; overlay.show(.error(error.localizedDescription)); hideSoon(4) }
             }
         }
+    }
+
+    /// Undo on the pill: ⌘Z to the app we pasted into (we never took focus, so it is still frontmost).
+    private func undoLast() {
+        overlay.model.onUndo = nil
+        Paster.undo()
+        overlay.hide()
     }
 
     private func hideSoon(_ seconds: Double) {

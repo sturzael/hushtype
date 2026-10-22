@@ -7,6 +7,8 @@ final class HotkeyMonitor {
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
     var onEscape: (() -> Bool)?   // return true to swallow
+    /// Space tapped while the chord is held: hands-free lock. Return true to swallow the Space.
+    var onLock: (() -> Bool)?
     var combo: HotkeyCombo = .standard
     /// While true (Settings is recording a shortcut) the chord never fires.
     var suspended = false
@@ -59,6 +61,13 @@ final class HotkeyMonitor {
         }
 
         if suspended { return Unmanaged.passUnretained(event) }
+        if type == .keyDown, keyCode == 49, active, let onLock {   // Space while the chord is down
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return nil }
+            var swallow = false
+            DispatchQueue.main.sync { swallow = onLock() }
+            if swallow { return nil }
+        }
+        if type == .keyUp, keyCode == 49, active, onLock != nil { return nil }   // and its key-up
         return handleChord(type: type, event: event, keyCode: keyCode)
     }
 

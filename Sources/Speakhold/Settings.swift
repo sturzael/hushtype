@@ -112,7 +112,9 @@ final class Settings: ObservableObject {
     }
     @Published var mode: HotkeyMode { didSet { d.set(mode.rawValue, forKey: "mode") } }
     @Published var model: WhisperModel { didSet { d.set(model.rawValue, forKey: "model") } }
-    @Published var cleanupEnabled: Bool { didSet { d.set(cleanupEnabled, forKey: "cleanupEnabled") } }
+    @Published var cleanupEngine: CleanupEngine { didSet { d.set(cleanupEngine.rawValue, forKey: "cleanupEngine") } }
+    /// One per line: `spoken -> written`. Applied after the model pass.
+    @Published var replacements: String { didSet { d.set(replacements, forKey: "replacements") } }
     @Published var cleanupModel: String { didSet { d.set(cleanupModel, forKey: "cleanupModel") } }
     @Published var anthropicKey: String { didSet { d.set(anthropicKey, forKey: "anthropicKey") } }
     @Published var dictionary: String { didSet { d.set(dictionary, forKey: "dictionary") } }
@@ -134,7 +136,14 @@ final class Settings: ObservableObject {
         }
         mode = HotkeyMode(rawValue: d.string(forKey: "mode") ?? "") ?? .hold
         model = WhisperModel(rawValue: d.string(forKey: "model") ?? "") ?? .turbo
-        cleanupEnabled = d.object(forKey: "cleanupEnabled") as? Bool ?? true
+        if let e = CleanupEngine(rawValue: d.string(forKey: "cleanupEngine") ?? "") {
+            cleanupEngine = e
+        } else if d.object(forKey: "cleanupEnabled") as? Bool == false {
+            cleanupEngine = .off                     // pre-0.2 setting carried over
+        } else {
+            cleanupEngine = Polish.appleAvailable ? .apple : .claude   // Claude only does anything once a key is set
+        }
+        replacements = d.string(forKey: "replacements") ?? ""
         cleanupModel = d.string(forKey: "cleanupModel") ?? "claude-haiku-5-5"
         anthropicKey = d.string(forKey: "anthropicKey") ?? Settings.keyFromEnvironment()
         dictionary = d.string(forKey: "dictionary") ?? ""

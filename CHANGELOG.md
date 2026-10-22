@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Polish on this Mac with Apple Intelligence** (macOS 26, Apple silicon): the default polish engine is now Apple's on-device model, so filler removal and punctuation need no API key and nothing leaves the machine. Claude stays as the opt-in engine under Settings → Cleanup → "Polish with". A length guard keeps the raw transcript if a model answers instead of editing.
+- Spoken commands ("new paragraph", "new line", "full stop", "comma", "question mark", "exclamation mark") are applied deterministically before any model, so they work with polish off too.
+- **Undo** on the pill for three seconds after a paste (sends ⌘Z to the app you dictated into). **Try again** on the error pill re-runs the last recording.
+- **Hands-free lock:** while holding the chord, tap Space; let go and keep talking. Press the chord again to finish, Esc to cancel. The pill shows a lock while locked.
+- **Text replacements** (Settings → Cleanup): one per line, `spoken -> written`, whole phrase, any case.
+- **Remote control:** `Speakhold --toggle | --start | --stop | --cancel | --settings | --history` talks to the running copy, as does `open speakhold://toggle`. For SketchyBar, Raycast, Shortcuts and scripts.
+- `--polish "text"` headless flag runs the polish pipeline on a string.
 - Settings and History windows redrawn in the bar's ink/mint language: sidebar, hairline cards, mint toggles, the shortcut as a chip, a waveform level meter, and a live miniature of the pill that follows your position / idle-tab / live-words choices.
 - App icon redrawn to match (ink squircle, mint waveform). `swift scripts/make-icon.swift` regenerates it.
 - Speakhold now keeps an icon in the Dock by default: click it to open Settings, right-click for Start dictation / Settings / History. Turn it off under Settings → General → App → "Show in the Dock" for menu-bar only.

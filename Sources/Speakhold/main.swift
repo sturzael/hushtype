@@ -88,8 +88,17 @@ import UniformTypeIdentifiers
     }
 }
 
-// `Speakhold --transcribe file.wav [--no-cleanup]` runs the pipeline headless and prints the result.
 let args = CommandLine.arguments
+
+// `Speakhold --toggle | --start | --stop | --cancel | --settings | --history` controls the running copy
+// (same as `open speakhold://toggle`), for SketchyBar, Raycast, Shortcuts and scripts.
+if let cmd = ["--toggle", "--start", "--stop", "--cancel", "--settings", "--history"].first(where: { args.contains($0) }) {
+    DistributedNotificationCenter.default().postNotificationName(
+        Notification.Name("co.wildinteractive.speakhold.command"), object: String(cmd.dropFirst(2)), userInfo: nil, deliverImmediately: true)
+    exit(0)
+}
+
+// `Speakhold --transcribe file.wav [--no-cleanup]` runs the pipeline headless and prints the result.
 if let i = args.firstIndex(of: "--transcribe"), i + 1 < args.count {
     let path = args[i + 1]
     let s = Settings.shared
@@ -101,12 +110,25 @@ if let i = args.firstIndex(of: "--transcribe"), i + 1 < args.count {
         do {
             let raw = try await t.transcribeFile(path, language: s.language, promptTerms: s.dictionaryTerms)
             print("RAW:", raw)
-            if !args.contains("--no-cleanup"), s.cleanupEnabled, !s.anthropicKey.isEmpty {
-                let clean = await Cleanup(apiKey: s.anthropicKey, model: s.cleanupModel)
-                    .clean(raw, dictionary: s.dictionaryTerms, style: s.styleNotes, appName: "Test")
-                print("CLEAN:", clean)
+            if !args.contains("--no-cleanup") {
+                print("CLEAN (\(s.cleanupEngine.rawValue)):", await Polish.run(raw, settings: s, appName: "Test"))
             }
         } catch { print("ERROR:", error.localizedDescription) }
+        sem.signal()
+    }
+    sem.wait()
+    exit(0)
+}
+
+// `Speakhold --polish "raw text"` runs the polish pipeline (spoken commands → model → replacements) on a string.
+if let i = args.firstIndex(of: "--polish"), i + 1 < args.count {
+    let s = Settings.shared
+    let sem = DispatchSemaphore(value: 0)
+    Task {
+        print("engine:", s.cleanupEngine.rawValue, "apple available:", Polish.appleAvailable)
+        print("commands:", SpokenCommands.apply(args[i + 1]))
+        let t = Date()
+        print("polished:", await Polish.run(args[i + 1], settings: s, appName: "Test"), String(format: "(%.2fs)", Date().timeIntervalSince(t)))
         sem.signal()
     }
     sem.wait()

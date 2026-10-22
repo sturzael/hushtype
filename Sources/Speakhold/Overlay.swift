@@ -11,6 +11,15 @@ final class OverlayModel: ObservableObject {
     @Published var levels: [Float] = Array(repeating: 0.05, count: 28)
     /// Partial transcript shown while recording and until the final text is pasted.
     @Published var liveText = ""
+    /// Hands-free: the chord was released after a Space tap and recording continues.
+    @Published var locked = false
+    /// The last recording is still around, so an error can offer "Try again".
+    @Published var canRetry = false
+    /// Where the pill is, in the panel's SwiftUI coordinates, so the panel can take clicks on it and nothing else.
+    @Published var pillFrame: CGRect = .zero
+    var onUndo: (() -> Void)?
+    var onRetry: (() -> Void)?
+    var onHover: ((Bool) -> Void)?
 
     func push(level: Float) {
         levels.removeFirst()
@@ -79,6 +88,19 @@ struct OverlayView: View {
         }
     }
 
+    /// Mint action on the pill ("Undo", "Try again").
+    private func chip(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Ink.mint)
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(Capsule().strokeBorder(Ink.mint.opacity(0.55), lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func words(_ s: String) -> some View {
         Text(s)
             .font(.system(size: 13.5))
@@ -102,6 +124,9 @@ struct OverlayView: View {
             case .idle:
                 glyph.frame(width: docked ? 14 : 28, height: docked ? 36 : 12)
             case .listening:
+                if model.locked {
+                    Image(systemName: "lock.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(Ink.mint)
+                }
                 Waveform(levels: Array(model.levels.suffix(14))).frame(height: 18)
                 if !model.liveText.isEmpty { words(model.liveText) }
             case .transcribing:
@@ -113,9 +138,11 @@ struct OverlayView: View {
             case .done(let text):
                 Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(Ink.mint)
                 words(text)
+                if model.onUndo != nil { chip("Undo") { model.onUndo?() } }
             case .error(let msg):
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Ink.red)
                 Text(msg).font(.system(size: 13)).lineLimit(2).foregroundStyle(Ink.text)
+                if model.canRetry { chip("Try again") { model.onRetry?() } }
             case .hidden:
                 EmptyView()
             }
@@ -125,6 +152,9 @@ struct OverlayView: View {
         .padding(.horizontal, isIdle ? 8 : 14)
         .padding(.vertical, isIdle ? 8 : 10)
         .background(pillBackground)
+        .background(GeometryReader { g in Color.clear.preference(key: PillFrameKey.self, value: g.frame(in: .global)) })
+        .onPreferenceChange(PillFrameKey.self) { model.pillFrame = $0 }
+        .onHover { model.onHover?($0) }
         .animation(Ink.morph, value: model.liveText)
         .padding(.top, 20)
         .padding(.leading, 20)
@@ -132,6 +162,11 @@ struct OverlayView: View {
         .padding(.trailing, position == .bottomCenter ? 20 : 0)   // flush against the right screen edge
         .opacity(model.phase == .hidden ? 0 : 1)
     }
+}
+
+struct PillFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
 }
 
 /// Capsule, with the corners squared off on whichever screen edges it is docked against.
@@ -216,9 +251,36 @@ final class OverlayPanel: NSPanel {
         ignoresMouseEvents = true
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        acceptsMouseMovedEvents = true
         let host = NSHostingView(rootView: OverlayView(model: model))
         host.wantsLayer = true
         contentView = host
+        // The panel is a wide transparent strip, so it must ignore the mouse except exactly over the pill while
+        // the pill offers an action. A global monitor sees the mouse while other apps own it; onHover(false)
+        // hands it back once the pointer leaves the pill.
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in self?.trackMouse() }
+        model.onHover = { [weak self] inside in if !inside { self?.ignoresMouseEvents = true } }
+    }
+
+    private var mouseMonitor: Any?
+
+    /// Phases with a clickable chip.
+    private var interactive: Bool {
+        switch model.phase {
+        case .done: return model.onUndo != nil
+        case .error: return model.canRetry
+        default: return false
+        }
+    }
+
+    private func trackMouse() {
+        guard interactive, isVisible, model.pillFrame != .zero else { ignoresMouseEvents = true; return }
+        let f = model.pillFrame, p = NSEvent.mouseLocation, w = frame
+        // SwiftUI's global space is the window with a top-left origin; check the bottom-left reading too so a
+        // coordinate-convention surprise degrades to a slightly larger hit area rather than a dead button.
+        let topLeft = NSRect(x: w.minX + f.minX, y: w.maxY - f.maxY, width: f.width, height: f.height)
+        let bottomLeft = NSRect(x: w.minX + f.minX, y: w.minY + f.minY, width: f.width, height: f.height)
+        ignoresMouseEvents = !(topLeft.contains(p) || bottomLeft.contains(p))
     }
 
     private var placedOn: NSScreen?
@@ -231,8 +293,9 @@ final class OverlayPanel: NSPanel {
         if !isVisible || screen != placedOn { layout(on: screen); placedOn = screen }
         withAnimation(Ink.morph) {
             model.phase = phase
-            if phase == .idle || phase == .hidden { model.liveText = "" }
+            if phase == .idle || phase == .hidden { model.liveText = ""; model.locked = false }
         }
+        ignoresMouseEvents = true   // trackMouse re-enables over a chip
         if !isVisible { orderFrontRegardless() }
     }
 
