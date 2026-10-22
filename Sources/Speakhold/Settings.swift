@@ -123,6 +123,8 @@ final class Settings: ObservableObject {
     @Published var showIdlePill: Bool { didSet { d.set(showIdlePill, forKey: "showIdlePill") } }
     @Published var livePreview: Bool { didSet { d.set(livePreview, forKey: "livePreview") } }
     @Published var pillPosition: PillPosition { didSet { d.set(pillPosition.rawValue, forKey: "pillPosition") } }
+    /// Keep an icon in the Dock (click it to open Settings; right-click for the menu). Off = menu-bar only.
+    @Published var showInDock: Bool { didSet { d.set(showInDock, forKey: "showInDock") } }
 
     private init() {
         if let data = d.data(forKey: "hotkeyCombo"), let c = try? JSONDecoder().decode(HotkeyCombo.self, from: data), c.isValid {
@@ -143,6 +145,7 @@ final class Settings: ObservableObject {
         showIdlePill = d.object(forKey: "showIdlePill") as? Bool ?? true
         livePreview = d.object(forKey: "livePreview") as? Bool ?? true
         pillPosition = PillPosition(rawValue: d.string(forKey: "pillPosition") ?? "") ?? .rightEdge
+        showInDock = d.object(forKey: "showInDock") as? Bool ?? true
     }
 
     /// Picks up ANTHROPIC_API_KEY from the environment on first launch so there is nothing to paste.

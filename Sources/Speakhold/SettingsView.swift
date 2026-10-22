@@ -499,8 +499,11 @@ struct SettingsView: View {
                 }
             }
 
-            InkCard(title: "Sounds & startup") {
-                InkRow(label: "Play sounds on start / stop", divider: false) {
+            InkCard(title: "App") {
+                InkRow(label: "Show in the Dock", hint: "Click the Dock icon to open Settings. Off keeps Speakhold in the menu bar only.", divider: false) {
+                    Toggle("", isOn: $settings.showInDock).toggleStyle(InkToggleStyle()).labelsHidden()
+                }
+                InkRow(label: "Play sounds on start / stop") {
                     Toggle("", isOn: $settings.playSounds).toggleStyle(InkToggleStyle()).labelsHidden()
                 }
                 InkRow(label: "Launch at login") {

@@ -31,7 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        applyDockPolicy()
+        buildMainMenu()
         buildMenu()
         wireRecorder()
         wireHotkeys()
@@ -56,9 +57,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             tick += 1
             self.overlay.model.push(level: Float.random(in: 0.1...1.0))
             if tick == 60 { self.overlay.show(.transcribing) }
-            if tick == 90 { self.overlay.show(.done("Hey Smriti, can you check the Pinnacle HubSpot sync before standup?")) }
+            if tick == 90 { self.overlay.show(.done("Can you check the sync before standup?")) }
             if tick == 130 { self.overlay.hide(); t.invalidate() }
         }
+    }
+
+    // MARK: Dock + main menu
+
+    /// Dock icon on or off at runtime; the bundle is LSUIElement so nothing flashes in the Dock before this runs.
+    private func applyDockPolicy() {
+        let want: NSApplication.ActivationPolicy = Settings.shared.showInDock ? .regular : .accessory
+        if NSApp.activationPolicy() != want { NSApp.setActivationPolicy(want) }
+    }
+
+    /// Clicking the Dock icon with no window open opens Settings.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { openSettings() }
+        return true
+    }
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        menu.addItem(withTitle: isRecording ? "Stop dictation" : "Start dictation", action: #selector(toggleFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
+        menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "")
+        return menu
+    }
+
+    /// A real main menu so ⌘, ⌘Q and the Edit shortcuts (⌘V into the API-key field) work while a window is key.
+    private func buildMainMenu() {
+        let main = NSMenu()
+        let appItem = NSMenuItem(); main.addItem(appItem)
+        let app = NSMenu()
+        app.addItem(withTitle: "About Speakhold", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        app.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        app.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "h")
+        app.addItem(.separator())
+        app.addItem(withTitle: "Hide Speakhold", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h").keyEquivalentModifierMask = [.command, .option]
+        app.addItem(withTitle: "Quit Speakhold", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = app
+        let editItem = NSMenuItem(); main.addItem(editItem)
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        let windowItem = NSMenuItem(); main.addItem(windowItem)
+        let window = NSMenu(title: "Window")
+        window.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowItem.submenu = window
+        NSApp.mainMenu = main
+        NSApp.windowsMenu = window
     }
 
     // MARK: menu bar
@@ -172,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applySettings() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.applyDockPolicy()
             if self.hotkeys.combo != Settings.shared.hotkey {
                 self.hotkeys.combo = Settings.shared.hotkey
             }
