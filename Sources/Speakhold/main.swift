@@ -135,6 +135,36 @@ if let i = args.firstIndex(of: "--polish"), i + 1 < args.count {
     exit(0)
 }
 
+// `Speakhold --record-meeting seconds dir` records system audio + mic for `seconds` and writes system.wav, mic.wav
+// and result.txt into dir. Run as the app bundle (`open -n -a Speakhold --args --record-meeting 12 /tmp/x`) so
+// macOS attributes the "System Audio Recording Only" and microphone prompts to Speakhold.
+if let i = args.firstIndex(of: "--record-meeting"), i + 2 < args.count {
+    let seconds = Double(args[i + 1]) ?? 10
+    let dir = args[i + 2]
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    var log: [String] = []
+    func note(_ s: String) { log.append(s); print(s); try? log.joined(separator: "\n").write(toFile: dir + "/result.txt", atomically: true, encoding: .utf8) }
+    let sem = DispatchSemaphore(value: 0)
+    Task {
+        let ok = await AudioRecorder.requestPermission()
+        note("mic permission: \(ok)")
+        guard #available(macOS 14.2, *) else { note("needs macOS 14.2"); sem.signal(); return }
+        let cap = MeetingCapture()
+        do { try cap.start(); note("capturing \(seconds)s, tap \(cap.tapDescription)") }
+        catch { note("capture failed: \(error.localizedDescription)"); sem.signal(); return }
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        cap.stop()
+        let sysPeak = cap.system.map(abs).max() ?? 0, micPeak = cap.mic.map(abs).max() ?? 0
+        note(String(format: "system %.1fs peak %.3f | mic %.1fs peak %.3f", Double(cap.system.count) / 16_000, sysPeak, Double(cap.mic.count) / 16_000, micPeak))
+        try? MeetingCapture.writeWAV(cap.system, to: dir + "/system.wav")
+        try? MeetingCapture.writeWAV(cap.mic, to: dir + "/mic.wav")
+        note("wrote system.wav + mic.wav")
+        sem.signal()
+    }
+    sem.wait()
+    exit(0)
+}
+
 // `Speakhold --render-overlay dir` renders the pill in each state to PNGs (layout check without screen access).
 if let i = args.firstIndex(of: "--render-overlay"), i + 1 < args.count {
     MainActor.assumeIsolated { renderOverlay(dir: args[i + 1]) }
