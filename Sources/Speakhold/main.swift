@@ -154,6 +154,9 @@ if let i = args.firstIndex(of: "--record-meeting"), i + 2 < args.count {
         catch { note("capture failed: \(error.localizedDescription)"); sem.signal(); return }
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         cap.stop()
+        cap.loadFromDisk()
+        let recent = cap.recent(seconds: 5)
+        note("ring: mic \(recent.mic.count) system \(recent.system.count) samples in the last 5 s")
         let sysPeak = cap.system.map(abs).max() ?? 0, micPeak = cap.mic.map(abs).max() ?? 0
         note(String(format: "system %.1fs peak %.3f | mic %.1fs peak %.3f", Double(cap.system.count) / 16_000, sysPeak, Double(cap.mic.count) / 16_000, micPeak))
         try? MeetingCapture.writeWAV(cap.system, to: dir + "/system.wav")
