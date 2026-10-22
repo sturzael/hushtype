@@ -541,13 +541,13 @@ struct SettingsView: View {
                         StatusChip(text: Polish.appleAvailable ? "Available" : "Not available", color: Polish.appleAvailable ? Ink.mint : Ink.amber)
                     }
                 }
-                if settings.cleanupEngine == .claude {
-                    InkRow(label: "Model") {
-                        InkField(placeholder: "claude-haiku-5-5", text: $settings.cleanupModel, width: 220)
-                    }
-                    InkRow(label: "Anthropic API key", hint: settings.anthropicKey.isEmpty ? "Nothing is polished until a key is set. Or set ANTHROPIC_API_KEY before launch." : "Only the transcript text is sent, never audio.") {
-                        InkField(placeholder: "sk-ant-…", text: $settings.anthropicKey, secure: true, width: 260)
-                    }
+            }
+            InkCard(title: "Claude", note: "One key, two jobs: polish when Claude is chosen above, and meeting notes whenever a key is set (the on-device model is too small for a long call). Only text is sent, never audio.") {
+                InkRow(label: "Anthropic API key", hint: settings.anthropicKey.isEmpty ? "Empty: polish uses Apple Intelligence, meeting notes use the on-device model in parts. Or set ANTHROPIC_API_KEY before launch." : "Set. Meeting notes go through Claude; polish does when chosen above.", divider: false) {
+                    InkField(placeholder: "sk-ant-…", text: $settings.anthropicKey, secure: true, width: 260)
+                }
+                InkRow(label: "Model") {
+                    InkField(placeholder: "claude-haiku-5-5", text: $settings.cleanupModel, width: 220)
                 }
             }
             InkCard(title: "Dictionary", note: "Names and terms to spell exactly. One per line. These prime the speech model and the polish pass.") {
@@ -588,11 +588,19 @@ struct SettingsView: View {
                     Toggle("", isOn: $settings.meetingDiarise).toggleStyle(InkToggleStyle()).labelsHidden()
                 }
             }
-            InkCard(title: "Notes", note: "Notes use Claude when a key is set under Cleanup (long meetings need its context), otherwise Apple Intelligence on the last part of the transcript.") {
-                InkRow(label: "Draft a follow-up email too", divider: false) {
+            InkCard(title: "Notes", note: "After you stop, the notes are written in the background: the menu bar shows the stage and percent, dictation keeps working, and a notification opens the file. Summary, Decisions, Action items, Open questions, then the full transcript, one markdown file per meeting.") {
+                InkRow(label: "Written by", hint: notesEngineHint, divider: false) {
+                    StatusChip(text: notesEngineLabel, color: notesEngineColor)
+                }
+                if settings.anthropicKey.isEmpty {
+                    InkRow(label: "Anthropic API key", hint: "Same key as Cleanup. Only the transcript text is sent, never audio.") {
+                        InkField(placeholder: "sk-ant-…", text: $settings.anthropicKey, secure: true, width: 260)
+                    }
+                }
+                InkRow(label: "Draft a follow-up email too") {
                     Toggle("", isOn: $settings.meetingFollowUp).toggleStyle(InkToggleStyle()).labelsHidden()
                 }
-                InkRow(label: "Save notes to", hint: settings.meetingsFolder.isEmpty ? "~/Documents/Speakhold Meetings" : settings.meetingsFolder) {
+                InkRow(label: "Save notes to", hint: settings.meetingsFolder.isEmpty ? "~/Documents/Speakhold Meetings (Finder: Meeting notes folder in the menu)" : settings.meetingsFolder) {
                     HStack(spacing: 8) {
                         Button("Choose…") {
                             let p = NSOpenPanel(); p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
@@ -616,6 +624,20 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var notesEngineLabel: String {
+        if !settings.anthropicKey.isEmpty { return "Claude · \(settings.cleanupModel.isEmpty ? "claude-haiku-5-5" : settings.cleanupModel)" }
+        return Polish.appleAvailable ? "Apple Intelligence, on-device" : "No notes engine"
+    }
+    private var notesEngineColor: Color {
+        if !settings.anthropicKey.isEmpty { return Ink.mint }
+        return Polish.appleAvailable ? Ink.amber : Ink.red
+    }
+    private var notesEngineHint: String {
+        if !settings.anthropicKey.isEmpty { return "Reads the whole transcript. Recommended for anything longer than a few minutes." }
+        if Polish.appleAvailable { return "Fine for a short call. A long meeting goes through the small on-device model in parts and it misreads cross-talk; add a Claude key for notes you can trust. You can rewrite a saved file later: Speakhold --notes-from-transcript <file>." }
+        return "Add a Claude key, or turn on Apple Intelligence (macOS 26, Apple silicon). Without either, the file has the transcript only."
     }
 
     // MARK: permissions
