@@ -184,9 +184,25 @@ if let i = args.firstIndex(of: "--meeting-from-files"), i + 2 < args.count {
         let engine: MeetingTranscriber = args.contains("--parakeet") ? ParakeetMeetingTranscriber() : WhisperMeetingTranscriber(transcriber: t)
         let dia: MeetingDiarizer? = args.contains("--diarise") ? FluidMeetingDiarizer() : nil
         do {
-            let url = try await session.finish(transcriber: engine, diarizer: dia, settings: s) { print("…", $0) }
+            let url = try await session.finish(transcriber: engine, diarizer: dia, settings: s) { print("…", $0, Int($1 * 100), "%") }
             print("WROTE", url.path)
             print(try String(contentsOf: url, encoding: .utf8))
+        } catch { print("ERROR", error.localizedDescription) }
+        sem.signal()
+    }
+    sem.wait()
+    exit(0)
+}
+
+// `Speakhold --notes-from-transcript "<meeting>.md"` rewrites the Notes section of a saved meeting file from its
+// transcript, with whatever notes engine is configured now.
+if let i = args.firstIndex(of: "--notes-from-transcript"), i + 1 < args.count {
+    guard #available(macOS 14.2, *) else { exit(1) }
+    let sem = DispatchSemaphore(value: 0)
+    Task {
+        do {
+            try await MeetingNotes.regenerate(at: URL(fileURLWithPath: args[i + 1]), settings: Settings.shared)
+            print("REWROTE", args[i + 1])
         } catch { print("ERROR", error.localizedDescription) }
         sem.signal()
     }

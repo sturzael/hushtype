@@ -53,8 +53,14 @@ actor Transcriber {
     }
 
     /// `fast` is the live preview while recording: no temperature fallback, so a tick costs one decoder pass.
+    /// Dictation calls in flight. A background meeting pass waits between regions while this is non-zero, so a
+    /// hold-to-talk never queues behind a twenty-minute recording.
+    private var dictating = 0
+
     func transcribe(_ samples: [Float], language: String, promptTerms: [String], fast: Bool = false) async throws -> String {
         guard let kit else { throw NSError(domain: "Speakhold", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
+        dictating += 1
+        defer { dictating -= 1 }
         // Whisper needs at least ~1 s; pad very short clips with silence.
         var audio = samples
         if audio.count < 16_000 { audio.append(contentsOf: [Float](repeating: 0, count: 16_000 - audio.count)) }
@@ -85,7 +91,8 @@ actor Transcriber {
     /// Timestamped segments for long recordings (meetings). Speech regions are found first with an energy gate,
     /// each region is decoded on its own and its offset added back, so times stay absolute. Whisper reports a
     /// leading-silence segment as starting at 0 and VAD chunking resets times per chunk, so neither can be trusted alone.
-    func transcribeSegments(_ samples: [Float], language: String, promptTerms: [String]) async throws -> [Segment] {
+    /// `progress` is the fraction of speech decoded so far (0–1), by samples, so long regions weigh what they cost.
+    func transcribeSegments(_ samples: [Float], language: String, promptTerms: [String], progress: (@Sendable (Double) -> Void)? = nil) async throws -> [Segment] {
         guard let kit else { throw NSError(domain: "Speakhold", code: 2, userInfo: [NSLocalizedDescriptionKey: "Model not loaded yet."]) }
         var options = DecodingOptions()
         options.language = language.isEmpty ? nil : language
@@ -101,11 +108,17 @@ actor Transcriber {
             options.usePrefillPrompt = true
         }
         var out: [Segment] = []
-        for region in Transcriber.speechRegions(samples) {
+        let regions = Transcriber.speechRegions(samples)
+        let total = max(1, regions.reduce(0) { $0 + $1.count })
+        var done = 0
+        for region in regions {
+            while dictating > 0 { try await Task.sleep(nanoseconds: 50_000_000) }
             var audio = Array(samples[region])
             if audio.count < 16_000 { audio.append(contentsOf: [Float](repeating: 0, count: 16_000 - audio.count)) }
             let offset = Double(region.lowerBound) / 16_000
             let results = try await kit.transcribe(audioArray: audio, decodeOptions: options)
+            done += region.count
+            progress?(Double(done) / Double(total))
             for r in results {
                 for seg in r.segments {
                     let text = Transcriber.tidy(seg.text)

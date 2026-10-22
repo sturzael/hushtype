@@ -70,7 +70,16 @@ struct MeetingView: View {
                 Button("Mark this moment") { state.onMark?() }.buttonStyle(InkButtonStyle())
                 Button("Catch me up") { state.onCatchUp?() }.buttonStyle(InkButtonStyle()).disabled(state.catchingUp)
                 Spacer()
-                if !state.status.isEmpty { Text(state.status).font(.system(size: 12)).foregroundStyle(Ink.muted) }
+                if let p = state.progress {
+                    HStack(spacing: 8) {
+                        Text(state.status).font(.system(size: 12)).foregroundStyle(Ink.muted)
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Ink.well).frame(width: 90, height: 5)
+                            Capsule().fill(Ink.mint).frame(width: max(4, 90 * p), height: 5)
+                        }
+                        Text("\(Int(p * 100))%").font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(Ink.muted)
+                    }
+                } else if !state.status.isEmpty { Text(state.status).font(.system(size: 12)).foregroundStyle(Ink.muted) }
                 Button(state.active ? "Stop & write notes" : "Done") { state.onStop?() }.buttonStyle(InkButtonStyle(primary: true))
             }
             .padding(.horizontal, 16).padding(.vertical, 10)

@@ -17,14 +17,19 @@ actor ParakeetMeetingTranscriber: MeetingTranscriber {
         status = "Ready"; progress?(status)
     }
 
-    func segments(_ samples: [Float], language: String, promptTerms: [String]) async throws -> [Transcriber.Segment] {
+    func segments(_ samples: [Float], language: String, promptTerms: [String], progress: (@Sendable (Double) -> Void)?) async throws -> [Transcriber.Segment] {
         try await prepare()
         guard let manager else { return [] }
         var out: [Transcriber.Segment] = []
-        for region in Transcriber.speechRegions(samples) {
+        let regions = Transcriber.speechRegions(samples)
+        let total = max(1, regions.reduce(0) { $0 + $1.count })
+        var done = 0
+        for region in regions {
             var audio = Array(samples[region])
             if audio.count < 16_000 { audio.append(contentsOf: [Float](repeating: 0, count: 16_000 - audio.count)) }
             let text = try await manager.transcribe(audio).trimmingCharacters(in: .whitespacesAndNewlines)
+            done += region.count
+            progress?(Double(done) / Double(total))
             guard !text.isEmpty else { continue }
             out.append(Transcriber.Segment(start: Double(region.lowerBound) / 16_000, end: Double(region.upperBound) / 16_000, text: text))
         }

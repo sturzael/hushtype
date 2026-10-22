@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import SwiftUI
+import UserNotifications
 
 final class AppStatus: ObservableObject {
     @Published var modelStatus = "Not loaded"
@@ -13,7 +14,7 @@ final class AppStatus: ObservableObject {
     var suspendHotkey: ((Bool) -> Void)?
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var statusItem: NSStatusItem!
     private let overlay = OverlayPanel()
     private let recorder = AudioRecorder()
@@ -37,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var meeting: Any?   // MeetingSession (macOS 14.2+)
     private var meetingTimer: Timer?
     private var meetingItem: NSMenuItem?
+    /// Notes being written in the background after a recording stopped (title → stage); shown in the menu.
+    private var meetingJobs: [UUID: (title: String, stage: String, fraction: Double)] = [:]
+    private var jobItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyDockPolicy()
@@ -55,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refreshPermissions() }
         overlay.model.onRetry = { [weak self] in self?.retryLast() }
         startCallWatch()
+        UNUserNotificationCenter.current().delegate = self
         DistributedNotificationCenter.default().addObserver(forName: Self.commandNote, object: nil, queue: .main) { [weak self] n in
             self?.handleCommand(n.object as? String ?? "")
         }
@@ -163,6 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Meeting window…", action: #selector(openMeetingWindow), keyEquivalent: "")
         menu.addItem(withTitle: "Mark this moment", action: #selector(markMoment), keyEquivalent: "")
         menu.addItem(withTitle: "Meeting notes folder", action: #selector(openMeetingsFolder), keyEquivalent: "")
+        jobItem = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
+        jobItem?.isEnabled = false; jobItem?.isHidden = true
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "History…", action: #selector(openHistory), keyEquivalent: "h")
@@ -292,30 +299,106 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         meetingState.active = false
         overlay.meetingLabel = nil
         if Settings.shared.playSounds { NSSound(named: "Pop")?.play() }
-        busy = true
-        overlay.show(.transcribing)
-        overlay.model.liveText = "Transcribing the meeting…"
         session.title = meetingState.title.trimmingCharacters(in: .whitespaces).isEmpty ? session.title : meetingState.title
         session.userNotes = meetingState.notes
         let s = Settings.shared
         let engine: MeetingTranscriber = (s.meetingEngine == .parakeet ? (parakeet as? ParakeetMeetingTranscriber) : nil) ?? WhisperMeetingTranscriber(transcriber: transcriber)
         let dia: MeetingDiarizer? = s.meetingDiarise ? ((diarizer as? FluidMeetingDiarizer) ?? FluidMeetingDiarizer()) : nil
-        Task { @MainActor in
-            defer { busy = false; overlay.model.liveText = ""; meetingState.status = "" }
+
+        // The notes are written in the background: the pill goes back to normal, dictation keeps working, the
+        // menu bar and the meeting window show how far along it is, and a notification says when the file is ready.
+        let id = UUID()
+        meetingJobs[id] = (session.title, "Starting…", 0)
+        meetingState.status = "Starting…"; meetingState.progress = 0
+        refreshJobItem()
+        overlay.model.onUndo = nil
+        overlay.show(.done("Writing the notes in the background"))
+        hideSoon(3)
+        Task.detached { [weak self] in
             do {
-                let url = try await session.finish(transcriber: engine, diarizer: dia, settings: s) { [weak self] step in
-                    DispatchQueue.main.async { self?.overlay.model.liveText = step; self?.meetingState.status = step }
+                try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+                let url = try await session.finish(transcriber: engine, diarizer: dia, settings: s) { [weak self] stage, fraction in
+                    DispatchQueue.main.async { self?.updateJob(id, title: session.title, stage: stage, fraction: fraction) }
                 }
-                History.shared.add("Meeting notes: \(url.lastPathComponent)", app: "Speakhold")
-                overlay.model.onUndo = nil
-                overlay.show(.done("Notes saved: \(url.lastPathComponent)"))
-                hideSoon(4)
-                meetingWindow?.orderOut(nil)
-                NSWorkspace.shared.open(url)
+                await MainActor.run { self?.finishJob(id, url: url) }
             } catch {
-                overlay.show(.error("Meeting notes failed: \(error.localizedDescription)")); hideSoon(5)
+                await MainActor.run { self?.failJob(id, title: session.title, error: error, audio: session.audioFolder) }
             }
         }
+    }
+
+    private func updateJob(_ id: UUID, title: String, stage: String, fraction: Double) {
+        meetingJobs[id] = (title, stage, fraction)
+        if meetingJobs.count == 1 { meetingState.status = stage; meetingState.progress = fraction }
+        refreshJobItem()
+    }
+
+    private func finishJob(_ id: UUID, url: URL) {
+        meetingJobs[id] = nil
+        if meetingJobs.isEmpty { meetingState.status = ""; meetingState.progress = nil }
+        refreshJobItem()
+        History.shared.add("Meeting notes: \(url.lastPathComponent)", app: "Speakhold")
+        if meeting == nil, !isRecording, !busy {
+            overlay.model.onUndo = nil
+            overlay.show(.done("Notes saved: \(url.lastPathComponent)"))
+            hideSoon(4)
+        }
+        notify(title: "Meeting notes ready", body: url.lastPathComponent, path: url.path)
+    }
+
+    private func failJob(_ id: UUID, title: String, error: Error, audio: URL?) {
+        meetingJobs[id] = nil
+        if meetingJobs.isEmpty { meetingState.status = ""; meetingState.progress = nil }
+        refreshJobItem()
+        let kept = audio.map { " The recording is kept at \($0.path)." } ?? ""
+        notify(title: "Meeting notes failed", body: error.localizedDescription + kept, path: audio?.path)
+        if meeting == nil, !isRecording, !busy { overlay.show(.error("Meeting notes failed: \(error.localizedDescription)")); hideSoon(6) }
+    }
+
+    private func refreshJobItem() {
+        guard let jobItem else { return }
+        if let job = meetingJobs.values.first {
+            let more = meetingJobs.count > 1 ? " (+\(meetingJobs.count - 1) more)" : ""
+            jobItem.title = "Writing notes: \(job.title) — \(job.stage) \(Int(job.fraction * 100))%\(more)"
+            jobItem.isHidden = false
+        } else {
+            jobItem.isHidden = true
+        }
+    }
+
+    /// A system notification; clicking it opens the file or folder in `path`. Falls back to opening the file
+    /// straight away when notifications are not allowed.
+    private func notify(title: String, body: String, path: String?) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { st in
+            guard st.authorizationStatus == .authorized || st.authorizationStatus == .provisional else {
+                if let path { DispatchQueue.main.async { NSWorkspace.shared.open(URL(fileURLWithPath: path)) } }
+                return
+            }
+            let c = UNMutableNotificationContent()
+            c.title = title; c.body = body; c.sound = .default
+            if let path { c.userInfo = ["path": path] }
+            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler h: @escaping (UNNotificationPresentationOptions) -> Void) {
+        h([.banner, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler h: @escaping () -> Void) {
+        if let path = r.notification.request.content.userInfo["path"] as? String { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+        h()
+    }
+
+    /// Quitting mid-job would lose the notes (the audio stays on disk); ask first.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !meetingJobs.isEmpty else { return .terminateNow }
+        let a = NSAlert()
+        a.messageText = "Meeting notes are still being written"
+        a.informativeText = "Quit now and the notes for \(meetingJobs.values.map(\.title).joined(separator: ", ")) will not be finished. The recording stays in the temporary folder."
+        a.addButton(withTitle: "Keep writing"); a.addButton(withTitle: "Quit anyway")
+        return a.runModal() == .alertFirstButtonReturn ? .terminateCancel : .terminateNow
     }
 
     /// Every few seconds: is some app using the microphone? Offer to record it, once per app, until it stops.
