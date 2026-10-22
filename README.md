@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Hold a key, talk, let go. Your words land wherever your cursor is.</strong><br>
-  A free, open-source, native macOS dictation app. Whisper runs on your Mac. Nothing leaves it.
+  Free, open-source dictation and meeting notes for macOS, in native Swift. Whisper runs on your Mac; your audio never leaves it. Add a Claude key only if you want it writing the notes.
 </p>
 
 <p align="center">
